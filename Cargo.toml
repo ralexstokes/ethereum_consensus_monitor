@@ -1,0 +1,31 @@
+[package]
+name = "eth-monitor"
+version = "0.1.0"
+authors = ["Alex Stokes <r.alex.stokes@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1", features = ["full"]}
+reqwest = { version = "0.11", features = ["json"]}
+futures = "0.3"
+warp = "0.3"
+log = "0.4"
+pretty_env_logger = "0.4"
+clap = "3.0.0-beta.2"
+toml = "0.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+eth2 = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+slot_clock = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+
+[patch]
+[patch.crates-io]
+tree_hash = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+tree_hash_derive = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+eth2_ssz = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+eth2_ssz_derive = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+eth2_ssz_types = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+eth2_hashing = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
