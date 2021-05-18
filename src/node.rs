@@ -2,7 +2,9 @@ use crate::eth2_api_client::{APIClientError, Eth2APIClient};
 use eth2::types::{Hash256, Slot};
 use reqwest::Client;
 use serde::Serialize;
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use tokio::time::{sleep, Duration};
 
@@ -67,8 +69,9 @@ pub enum NodeError {
 pub struct Node {
     // Reference to a consensus node
     api_client: Eth2APIClient,
-    status: Status,
+    pub status: Status,
     node_type: Option<ConsensusType>,
+    pub id: Option<u64>,
 
     // last known head for this node
     pub head: Option<Head>,
@@ -120,6 +123,7 @@ impl Node {
             api_client,
             status: Status::Unreachable,
             node_type: None,
+            id: None,
             head: None,
             head_delay_ms: 0,
         }
@@ -155,18 +159,34 @@ impl Node {
         Ok(head)
     }
 
-    pub async fn connect(&mut self) -> Result<(), NodeError> {
-        let version = self.api_client.get_node_version().await?;
-
+    pub async fn refresh_status(&mut self) -> Result<(), NodeError> {
         let sync_status = self.api_client.get_sync_status().await?;
-
         self.status = if sync_status.is_syncing {
             Status::Syncing
         } else {
             Status::Healthy
         };
+        Ok(())
+    }
+
+    pub async fn connect(&mut self) -> Result<(), NodeError> {
+        let version = self.api_client.get_node_version().await?;
         self.node_type = infer_node_type(&version);
+
+        self.refresh_status().await?;
+
+        let identity = self.api_client.get_identity_data().await?;
+        let peer_id = identity.peer_id;
+        self.id = Some(hash_of(&peer_id));
+
         self.fetch_head().await?;
         Ok(())
     }
+}
+
+fn hash_of(some_string: &str) -> u64 {
+    let mut s = DefaultHasher::new();
+    some_string.hash(&mut s);
+    let digest = s.finish();
+    digest
 }

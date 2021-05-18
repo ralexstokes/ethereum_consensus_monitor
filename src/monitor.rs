@@ -1,6 +1,6 @@
 use crate::api_server::ApiServer;
 use crate::config::Config;
-use crate::node::Node;
+use crate::node::{Node, Status};
 use crate::timer::Timer;
 use futures::future;
 use reqwest::Client;
@@ -74,9 +74,16 @@ impl Monitor {
 
                 let fetches = nodes.iter().map(|node| async move {
                     let mut node = node.write().await;
+                    if let Status::Syncing = node.status {
+                        if let Err(e) = node.refresh_status().await {
+                            log::warn!("{}", e);
+                            node.status = Status::Unreachable;
+                        }
+                    }
                     let result = node.fetch_head_with_hint(slot).await;
                     if let Err(e) = result {
                         log::warn!("{}", e);
+                        node.status = Status::Unreachable;
                     }
                 });
                 future::join_all(fetches).await;

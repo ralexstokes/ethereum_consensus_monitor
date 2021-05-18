@@ -8,6 +8,7 @@ use warp::Filter;
 
 #[derive(Serialize)]
 struct NodeResponse {
+    id: Option<u64>,
     head: Option<Head>,
 }
 
@@ -48,7 +49,10 @@ impl ApiServer {
 async fn get_nodes(nodes: Nodes) -> Result<impl warp::Reply, warp::Rejection> {
     let reads = nodes.iter().map(|node| async move {
         let node = node.read().await;
-        NodeResponse { head: node.head }
+        NodeResponse {
+            id: node.id,
+            head: node.head,
+        }
     });
     let nodes = future::join_all(reads).await;
     Ok(warp::reply::json(&nodes))

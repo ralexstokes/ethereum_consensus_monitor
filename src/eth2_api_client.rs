@@ -1,5 +1,6 @@
 use eth2::types::{
-    BlockHeaderAndSignature, BlockHeaderData, GenericResponse, Hash256, SyncingData, VersionData,
+    BlockHeaderAndSignature, BlockHeaderData, FinalityCheckpointsData, GenericResponse, Hash256,
+    IdentityData, Slot, SyncingData, VersionData,
 };
 use reqwest::{Client, Error as HTTPError};
 use serde_json::Error as JSONError;
@@ -71,6 +72,32 @@ impl Eth2APIClient {
             .send()
             .await?
             .json::<GenericResponse<SyncingData>>()
+            .await?;
+        Ok(response.data)
+    }
+
+    pub async fn get_identity_data(&self) -> APIResult<IdentityData> {
+        let endpoint = self.endpoint_for("node/identity");
+        let response = self
+            .http
+            .get(endpoint)
+            .send()
+            .await?
+            .json::<GenericResponse<IdentityData>>()
+            .await?;
+        Ok(response.data)
+    }
+
+    pub async fn get_finality_checkpoints(&self, slot: Slot) -> APIResult<FinalityCheckpointsData> {
+        let endpoint_query =
+            String::from("beacon/states/") + &slot.to_string() + "/finality_checkpoints";
+        let endpoint = self.endpoint_for(&endpoint_query);
+        let response = self
+            .http
+            .get(endpoint)
+            .send()
+            .await?
+            .json::<GenericResponse<FinalityCheckpointsData>>()
             .await?;
         Ok(response.data)
     }
