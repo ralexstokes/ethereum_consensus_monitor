@@ -1,3 +1,4 @@
+use crate::fork_choice::ProtoArray;
 use eth2::types::{
     BlockHeaderAndSignature, BlockHeaderData, FinalityCheckpointsData, GenericResponse, Hash256,
     IdentityData, Slot, SyncingData, VersionData,
@@ -98,6 +99,18 @@ impl Eth2APIClient {
             .send()
             .await?
             .json::<GenericResponse<FinalityCheckpointsData>>()
+            .await?;
+        Ok(response.data)
+    }
+
+    pub async fn get_lighthouse_fork_choice(&self) -> APIResult<ProtoArray> {
+        let endpoint = String::from(self.get_endpoint()) + "/lighthouse/proto_array";
+        let response = self
+            .http
+            .get(endpoint)
+            .send()
+            .await?
+            .json::<GenericResponse<ProtoArray>>()
             .await?;
         Ok(response.data)
     }

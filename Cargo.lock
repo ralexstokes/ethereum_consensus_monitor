@@ -1093,6 +1093,7 @@ dependencies = [
  "futures",
  "log",
  "pretty_env_logger",
+ "proto_array",
  "reqwest",
  "serde",
  "serde_json",
