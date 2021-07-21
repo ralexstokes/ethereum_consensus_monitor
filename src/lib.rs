@@ -7,4 +7,4 @@ mod monitor;
 mod node;
 mod timer;
 
-pub use monitor::from_config;
+pub use monitor::Monitor;

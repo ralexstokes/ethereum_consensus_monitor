@@ -5,36 +5,26 @@ use crate::fork_choice::ForkChoice;
 use crate::node::{new_node, Node, Status};
 use crate::timer::Timer;
 use futures::future;
-use reqwest::Client;
-use std::path::Path;
-use std::path::PathBuf;
+use reqwest::ClientBuilder;
+use std::time::Duration;
 use tokio::task;
 
 pub struct Monitor {
     config: Config,
-    output_dir: PathBuf,
-    port: u16,
 }
 
 impl Monitor {
-    pub fn with_output_dir<P>(&mut self, output_dir: P) -> &mut Self
-    where
-        P: AsRef<Path>,
-    {
-        self.output_dir = output_dir.as_ref().to_path_buf();
-        self
+    pub fn from_config(config: &str) -> Monitor {
+        let config = toml::from_str(config).expect("config is well-formatted TOML");
+        Monitor { config }
     }
 
-    pub fn with_port(&mut self, port: u16) -> &mut Self {
-        self.port = port;
-        self
-    }
-}
-
-impl Monitor {
     async fn connect_to_nodes(&self) -> Vec<Node> {
-        let client = Client::new();
-        let connections = self.config.endpoints.iter().map(|endpoint| {
+        let client = ClientBuilder::new()
+            .connect_timeout(Duration::from_millis(1000))
+            .build()
+            .expect("no errors with setup");
+        let connections = self.config.monitor.endpoints.iter().map(|endpoint| {
             let client = client.clone();
             async move {
                 let node_ref = new_node(endpoint, client);
@@ -85,6 +75,7 @@ impl Monitor {
             }
             loop {
                 let slot = timer.tick_slot().await;
+                log::debug!("{}", slot);
 
                 let fetches = nodes.iter().map(|node| async move {
                     let mut node = node.write().await;
@@ -119,12 +110,12 @@ impl Monitor {
             }
         });
 
-        let port = self.port;
+        let port = self.config.monitor.port;
         let api_server = ApiServer::new(
-            &self.output_dir,
+            &self.config.monitor.output_dir,
             nodes_handle,
             fork_choice_handle,
-            self.config.get_spec(),
+            &self.config,
         );
         let server_task = task::spawn(async move {
             api_server.run(([127, 0, 0, 1], port)).await;
@@ -132,15 +123,6 @@ impl Monitor {
 
         let tasks = vec![timer_task, server_task];
         future::join_all(tasks).await;
-    }
-}
-
-pub fn from_config(config: &str) -> Monitor {
-    let config = toml::from_str(config).expect("config is well-formatted TOML");
-    Monitor {
-        config,
-        output_dir: PathBuf::from("public"),
-        port: 3030,
     }
 }
 
