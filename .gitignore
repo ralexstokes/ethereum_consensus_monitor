@@ -1,2 +1,6 @@
-/target
+target/
 *local.toml
+.calva
+.cpcache
+.nrepl-port
+.rebel_readline_history

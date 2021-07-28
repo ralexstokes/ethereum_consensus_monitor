@@ -1,0 +1,2 @@
+{:main com.github.ralexstokes.app
+ :closure-defines {"goog.DEBUG" true}}

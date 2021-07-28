@@ -1,0 +1,14 @@
+{:paths ["src" "resources" "target"]
+ :deps {clj-http/clj-http {:mvn/version "3.12.3"}
+        org.clojure/clojurescript {:mvn/version "1.10.866"}
+        com.bhauman/figwheel-main {:mvn/version "0.2.13"}
+        com.bhauman/rebel-readline-cljs {:mvn/version "0.1.4"}
+        reagent/reagent {:mvn/version "0.10.0"}
+        cljs-http/cljs-http {:mvn/version "0.1.46"}
+        cljsjs/d3 {:mvn/version "5.12.0-0"}
+        camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.2"}}
+ :aliases {:dev {:main-opts ["-m" "figwheel.main"
+                             "--build" "dev"
+                             "--repl"]}
+           :prod {:main-opts ["-m" "figwheel.main"
+                              "--build-once" "prod"]}}}

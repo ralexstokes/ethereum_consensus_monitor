@@ -1,0 +1,4 @@
+^{:figwheel-core false}
+{:main com.github.ralexstokes.app
+ :optimizations :advanced
+ :output-to "../public/js/main.js"}
