@@ -1,4 +1,4 @@
-use crate::chain::Coordinate;
+use crate::chain::{Coordinate, FinalityData};
 use crate::eth2_api_client::{APIClientError, Eth2APIClient};
 use crate::fork_choice::ProtoArray;
 use eth2::types::Slot;
@@ -13,6 +13,12 @@ use tokio::time::{sleep, Duration};
 
 const CONSENSUS_HEAD_SYNC_TIME_MILLIS: u64 = 150;
 const CONSENSUS_HEAD_ATTEMPTS_PER_FETCH: u64 = 3;
+
+fn hash_of(some_string: &str) -> u64 {
+    let mut s = DefaultHasher::new();
+    some_string.hash(&mut s);
+    s.finish()
+}
 
 pub enum Status {
     Unreachable,
@@ -54,6 +60,7 @@ enum ExecutionType {
     Geth,
     Nethermind,
     Besu,
+    Erigon,
 }
 
 impl fmt::Display for ExecutionType {
@@ -62,6 +69,7 @@ impl fmt::Display for ExecutionType {
             ExecutionType::Geth => write!(f, "Geth"),
             ExecutionType::Nethermind => write!(f, "Nethermind"),
             ExecutionType::Besu => write!(f, "Besu"),
+            ExecutionType::Erigon => write!(f, "Erigon"),
         }
     }
 }
@@ -80,6 +88,7 @@ pub struct NodeInner {
     api_client: Eth2APIClient,
     pub status: Status,
     node_type: Option<ConsensusType>,
+    pub version: Option<String>,
     pub id: Option<u64>,
     // Indicate an attached execution client
     execution_node_type: Option<ExecutionType>,
@@ -136,6 +145,7 @@ pub fn new_node(endpoint: &str, http: Client) -> Node {
         api_client,
         status: Status::Unreachable,
         node_type: None,
+        version: None,
         id: None,
         execution_node_type: None,
         head: None,
@@ -153,6 +163,14 @@ impl NodeInner {
         self.api_client
             .get_lighthouse_fork_choice()
             .await
+            .map_err(|e| e.into())
+    }
+
+    pub async fn fetch_finality_data(&self, slot: Slot) -> Result<FinalityData, NodeError> {
+        self.api_client
+            .get_finality_checkpoints(slot)
+            .await
+            .map(|checkpoints| checkpoints.into())
             .map_err(|e| e.into())
     }
 
@@ -199,6 +217,7 @@ impl NodeInner {
     pub async fn connect(&mut self) -> Result<(), NodeError> {
         let version = self.api_client.get_node_version().await?;
         self.node_type = infer_node_type(&version);
+        self.version = Some(version);
 
         self.refresh_status().await?;
 
@@ -212,11 +231,4 @@ impl NodeInner {
         }
         Ok(())
     }
-}
-
-fn hash_of(some_string: &str) -> u64 {
-    let mut s = DefaultHasher::new();
-    some_string.hash(&mut s);
-    let digest = s.finish();
-    digest
 }

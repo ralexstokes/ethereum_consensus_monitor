@@ -96,6 +96,6 @@ fn build_fork_choice_tree(
             slot: proto_node.slot,
         },
         weight: proto_node.weight,
-        children: children,
+        children,
     }
 }

@@ -1,5 +1,5 @@
 use crate::api_server::ApiServer;
-use crate::chain::Coordinate;
+use crate::chain::{Chain, Coordinate};
 use crate::config::Config;
 use crate::fork_choice::ForkChoice;
 use crate::node::{new_node, Node, Status};
@@ -8,6 +8,7 @@ use futures::future;
 use reqwest::ClientBuilder;
 use std::time::Duration;
 use tokio::task;
+use tokio::time::sleep;
 
 pub struct Monitor {
     config: Config,
@@ -22,6 +23,7 @@ impl Monitor {
     async fn connect_to_nodes(&self) -> Vec<Node> {
         let client = ClientBuilder::new()
             .connect_timeout(Duration::from_millis(1000))
+            .timeout(Duration::from_millis(1000))
             .build()
             .expect("no errors with setup");
         let connections = self.config.monitor.endpoints.iter().map(|endpoint| {
@@ -68,14 +70,18 @@ impl Monitor {
             self.config.consensus_chain.slots_per_epoch,
         );
         let fork_choice_handle = fork_choice.clone();
-
+        let chain = Chain::default();
+        let chain_handle = chain.clone();
         let timer_task = task::spawn(async move {
             if timer.is_before_genesis() {
                 log::warn!("before genesis, blocking head monitor until then...");
             }
             loop {
-                let slot = timer.tick_slot().await;
-                log::debug!("{}", slot);
+                let (slot, epoch) = timer.tick_slot().await;
+                log::trace!("epoch: {}, slot: {}", epoch, slot);
+                // NOTE: add some delay to avoid racing nodes processing blocks
+                // TODO: remove upon moving to event-based API
+                sleep(Duration::from_millis(100)).await;
 
                 let fetches = nodes.iter().map(|node| async move {
                     let mut node = node.write().await;
@@ -94,7 +100,7 @@ impl Monitor {
                 if let Some(ref fork_choice_provider) = fork_choice_provider {
                     let mut node = fork_choice_provider.write().await;
                     let result = node.fetch_fork_choice().await;
-                    let mut fork_choice = fork_choice.clone();
+                    let mut fork_choice = fork_choice_handle.clone();
                     match result {
                         Ok(proto_array) => {
                             let _ = task::spawn_blocking(move || {
@@ -106,17 +112,27 @@ impl Monitor {
                             node.status = Status::Unreachable;
                         }
                     }
+
+                    let result = node.fetch_finality_data(slot).await;
+                    match result {
+                        Ok(finality_data) => chain_handle.set_status(finality_data),
+                        Err(e) => {
+                            log::warn!("{}", e);
+                            node.status = Status::Unreachable;
+                        }
+                    }
                 }
             }
         });
 
-        let port = self.config.monitor.port;
         let api_server = ApiServer::new(
             &self.config.monitor.output_dir,
             nodes_handle,
-            fork_choice_handle,
+            fork_choice,
+            chain,
             &self.config,
         );
+        let port = self.config.monitor.port;
         let server_task = task::spawn(async move {
             api_server.run(([127, 0, 0, 1], port)).await;
         });
@@ -126,7 +142,7 @@ impl Monitor {
     }
 }
 
-async fn find_fork_choice_provider(nodes: &Vec<Node>) -> Option<Node> {
+async fn find_fork_choice_provider(nodes: &[Node]) -> Option<Node> {
     for node_ref in nodes {
         let node = node_ref.read().await;
         if node.supports_fork_choice() {

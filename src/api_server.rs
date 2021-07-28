@@ -1,19 +1,21 @@
-use crate::chain::Coordinate;
+use crate::chain::{Chain, Coordinate};
 use crate::config::Config;
 use crate::fork_choice::ForkChoice;
-use crate::node::Node;
+use crate::node::{Node, Status};
 use futures::future;
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use warp;
 use warp::Filter;
 
 #[derive(Serialize)]
 struct NodeResponse {
     id: Option<u64>,
     head: Option<Coordinate>,
+    version: Option<String>,
+    healthy: bool,
+    syncing: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -39,6 +41,7 @@ pub struct ApiServer {
     web_dir: PathBuf,
     nodes: Vec<Node>,
     fork_choice_handle: ForkChoice,
+    chain: Chain,
     network_config: NetworkConfigResponse,
 }
 
@@ -47,6 +50,7 @@ impl ApiServer {
         web_dir: P,
         nodes: Vec<Node>,
         fork_choice_handle: ForkChoice,
+        chain: Chain,
         config: &Config,
     ) -> Self
     where
@@ -56,6 +60,7 @@ impl ApiServer {
             web_dir: web_dir.as_ref().to_path_buf(),
             nodes,
             fork_choice_handle,
+            chain,
             network_config: config.into(),
         }
     }
@@ -74,6 +79,13 @@ impl ApiServer {
             .and(warp::path::end())
             .and(warp::any().map(move || nodes_handle.clone()))
             .and_then(get_nodes);
+
+        let chain_handle = self.chain.clone();
+        let chain = warp::get()
+            .and(warp::path("chain"))
+            .and(warp::path::end())
+            .and(warp::any().map(move || chain_handle.clone()))
+            .and_then(get_chain_data);
 
         let fork_choice_handle = self.fork_choice_handle.clone();
         let fork_choice = warp::get()
@@ -97,16 +109,23 @@ impl ApiServer {
             .and(warp::path::end())
             .and_then(serve_weak_subjectivity_data);
 
+        let api = warp::get()
+            .and(warp::path("api"))
+            .and(warp::path("v1"))
+            .and(
+                network_config
+                    .or(nodes)
+                    .or(chain)
+                    .or(fork_choice)
+                    .or(participation)
+                    .or(deposit_contract)
+                    .or(weak_subjectivity),
+            );
+
         let html_dir = self.web_dir.clone();
         let app = warp::get().and(warp::any()).and(warp::fs::dir(html_dir));
 
-        let routes = network_config
-            .or(nodes)
-            .or(fork_choice)
-            .or(participation)
-            .or(deposit_contract)
-            .or(weak_subjectivity)
-            .or(app);
+        let routes = api.or(app);
 
         warp::serve(routes).run(addr).await
     }
@@ -118,6 +137,9 @@ async fn get_nodes(nodes: Vec<Node>) -> Result<impl warp::Reply, warp::Rejection
         NodeResponse {
             id: node.id,
             head: node.head,
+            version: node.version.clone(),
+            healthy: matches!(node.status, Status::Healthy | Status::Syncing),
+            syncing: matches!(node.status, Status::Syncing),
         }
     });
     let nodes = future::join_all(reads).await;
@@ -128,6 +150,11 @@ async fn serve_network_config(
     network_config: Arc<NetworkConfigResponse>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     Ok(warp::reply::json(&*network_config))
+}
+
+async fn get_chain_data(chain: Chain) -> Result<impl warp::Reply, warp::Rejection> {
+    let status = chain.get_status();
+    Ok(warp::reply::json(&status))
 }
 
 async fn get_fork_choice(fork_choice: ForkChoice) -> Result<impl warp::Reply, warp::Rejection> {

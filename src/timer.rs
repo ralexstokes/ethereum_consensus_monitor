@@ -1,3 +1,4 @@
+use eth2::types::Epoch;
 use slot_clock::{Slot, SlotClock, SystemTimeSlotClock};
 use tokio::time::{sleep, Duration};
 
@@ -24,13 +25,15 @@ impl Timer {
             .expect("can read the system clock")
     }
 
-    pub async fn tick_slot(&self) -> Slot {
+    pub async fn tick_slot(&self) -> (Slot, Epoch) {
         let next_slot_duration = self
             .inner
             .duration_to_next_slot()
             .expect("can read system clock");
 
         sleep(next_slot_duration).await;
-        self.inner.now().expect("can read system clock")
+        let slot = self.inner.now().expect("can read system clock");
+        let epoch = slot.epoch(self.slots_per_epoch);
+        (slot, epoch)
     }
 }
