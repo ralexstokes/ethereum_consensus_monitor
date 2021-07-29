@@ -8,25 +8,30 @@
 (defn- url-with [path]
   (str "/api/v1" path))
 
-(defn- kebab-keys [m]
-  (into {}
-        (map (fn [[k v]] [(csk/->kebab-case k) v]) m)))
+(defn- convert-u64-to-num [k v]
+  (case k
+    :slot (js/parseInt v)
+    :epoch (js/parseInt v)
+    v))
 
-(defn- kebab-keys-if-map [data]
+(defn- kebab-keys-and-convert-types [m]
+  (into {}
+        (map (fn [[k v]] [(csk/->kebab-case k) (convert-u64-to-num k v)]) m)))
+
+(defn- kebab-keys-and-convert-types-if-map [data]
   (if (map? data)
-    (kebab-keys data)
+    (kebab-keys-and-convert-types data)
     data))
 
-(defn- get-body-with-converted-keys [resp]
-  (let [body (or (:body resp)
-                 :nil)]
-    (walk/postwalk kebab-keys-if-map body)))
+(defn- parse-response [resp]
+  (let [body (or (:body resp) {})]
+    (walk/postwalk kebab-keys-and-convert-types-if-map body)))
 
 (defn- get-api-data [path]
   (let [resp (-> path
                  url-with
                  (http/get {:with-credentials? false}))]
-    (async/map get-body-with-converted-keys [resp])))
+    (async/map parse-response [resp])))
 
 (defn fetch-network-config []
   (get-api-data "/network-config"))
