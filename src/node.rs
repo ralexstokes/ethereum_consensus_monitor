@@ -159,6 +159,13 @@ impl NodeInner {
         matches!(self.node_type, Some(ConsensusType::Lighthouse))
     }
 
+    async fn wait_for_head_delay(&self) {
+        // allow some amount of time for synchronization
+        // in the event this call is racing block propagation
+        // during the current slot...
+        sleep(Duration::from_millis(self.head_delay_ms)).await;
+    }
+
     pub async fn fetch_fork_choice(&self) -> Result<ProtoArray, NodeError> {
         self.api_client
             .get_lighthouse_fork_choice()
@@ -167,6 +174,8 @@ impl NodeInner {
     }
 
     pub async fn fetch_finality_data(&self, slot: Slot) -> Result<FinalityData, NodeError> {
+        // TODO: fix synchronization here...
+        self.wait_for_head_delay().await;
         self.api_client
             .get_finality_checkpoints(slot)
             .await
@@ -175,11 +184,7 @@ impl NodeInner {
     }
 
     async fn fetch_head(&mut self) -> Result<Coordinate, NodeError> {
-        // allow some amount of time for synchronization
-        // in the event this call is racing block propagation
-        // during the current slot...
-        sleep(Duration::from_millis(self.head_delay_ms)).await;
-
+        self.wait_for_head_delay().await;
         let result = self.api_client.get_latest_header().await?;
         let (root, latest_header) = result;
         let slot = latest_header.message.slot;
