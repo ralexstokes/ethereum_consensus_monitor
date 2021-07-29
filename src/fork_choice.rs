@@ -2,6 +2,7 @@ use crate::chain::Coordinate;
 use eth2::types::{Epoch, Hash256, Slot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
 
 #[derive(Serialize, Deserialize)]
@@ -41,8 +42,20 @@ impl ForkChoice {
     pub fn update(&mut self, proto_array: ProtoArray) {
         let mut inner = self.tree.write().expect("has data");
         let finalized_slot = proto_array.finalized_epoch.start_slot(self.slots_per_epoch);
-        let fork_choice = ForkChoiceNode::from(proto_array, finalized_slot);
-        *inner = fork_choice;
+        let node_count = proto_array.nodes.len();
+        match ForkChoiceNode::try_from((proto_array, finalized_slot)) {
+            Ok(fork_choice) => {
+                log::trace!(
+                    "updated proto array starting at {} with {} nodes",
+                    finalized_slot,
+                    node_count,
+                );
+                *inner = fork_choice;
+            }
+            Err(err) => {
+                log::warn!("failed to update fork choice");
+            }
+        }
     }
 }
 
@@ -53,17 +66,35 @@ pub struct ForkChoiceNode {
     children: Vec<ForkChoiceNode>,
 }
 
-impl ForkChoiceNode {
-    fn from(proto_array: ProtoArray, finalized_slot: Slot) -> Self {
+#[derive(Debug)]
+pub enum ForkChoiceError {
+    MissingFinalizedNode,
+}
+
+impl std::fmt::Display for ForkChoiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingFinalizedNode => write!(
+                f,
+                "missing finalized node in provided data (check API response?)"
+            ),
+        }
+    }
+}
+
+impl TryFrom<(ProtoArray, Slot)> for ForkChoiceNode {
+    type Error = ForkChoiceError;
+
+    fn try_from((proto_array, finalized_slot): (ProtoArray, Slot)) -> Result<Self, Self::Error> {
         let mut parent_index_to_children: HashMap<usize, Vec<Hash256>> = HashMap::new();
 
-        let mut finalized_root = Hash256::default();
+        let mut finalized_root = None;
         for node in proto_array.nodes.iter() {
             if node.slot < finalized_slot {
                 continue;
             }
             if node.slot == finalized_slot {
-                finalized_root = node.root;
+                finalized_root = Some(node.root);
             }
 
             if let Some(parent_index) = node.parent {
@@ -71,7 +102,9 @@ impl ForkChoiceNode {
                 children.push(node.root);
             }
         }
-        build_fork_choice_tree(&finalized_root, &parent_index_to_children, &proto_array)
+        finalized_root
+            .ok_or(ForkChoiceError::MissingFinalizedNode)
+            .map(|root| build_fork_choice_tree(&root, &parent_index_to_children, &proto_array))
     }
 }
 
