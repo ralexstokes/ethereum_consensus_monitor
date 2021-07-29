@@ -87,9 +87,7 @@
      [clock/view state]]
     [:div#nav-tip-monitor.tab-pane.fade.show.active
      [container-row
-      [nodes/view state]]
-     [container-row
-      [nodes/compare-heads-view state]]]
+      [nodes/view state]]]
     [:div#nav-block-tree.tab-pane.fade.show
      [container-row
       [block-tree/view]]]
