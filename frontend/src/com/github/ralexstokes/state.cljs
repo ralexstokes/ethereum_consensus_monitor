@@ -7,8 +7,12 @@
                     :seconds-per-slot 12
                     :genesis-time 0
                     :slots-per-epoch 32}
-   :slot-clock nil
+   :slot-clock {:slot 0
+                :epoch 0
+                :slot-in-epoch 0
+                :progress-into-slot 0}
    :nodes []
+   :block-tree {}
    :chain {:justified-checkpoint {:epoch 0 :root zero-root} :finalized-checkpoint {:epoch 0 :root zero-root}}
    :majority-root zero-root
    :participation-data []

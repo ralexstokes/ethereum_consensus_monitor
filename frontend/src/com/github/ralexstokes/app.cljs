@@ -6,46 +6,20 @@
    [com.github.ralexstokes.block-tree :as block-tree]
    [com.github.ralexstokes.nodes :as nodes]
    [com.github.ralexstokes.navigation :as navigation]
-   [com.github.ralexstokes.participation :as participation]
-   [com.github.ralexstokes.block-explorer :as explorer]
+  ;;  [com.github.ralexstokes.validator :as validator]
+  ;;  [com.github.ralexstokes.participation :as participation]
+  ;;  [com.github.ralexstokes.weak-subjectivity :as weak-subjectivity]
    [com.github.ralexstokes.ui :as ui]
    [com.github.ralexstokes.state :as state]
-   [cljsjs.d3]
-   [clojure.string :as str]
    [reagent.core :as r]
    [reagent.dom :as r.dom]
    [cljs.core.async :refer [<! chan close!]]))
 
 (def debug-mode? js/goog.DEBUG)
-(def polling-frequency 3000) ;; ms
+(def polling-frequency 1000) ;; ms
 (def slot-clock-refresh-frequency 500) ;; ms
-
-(defn- get-time []
+(defn now-ms []
   (.now js/Date))
-
-(defn validator-info-view [state]
-  (let [balance (state/->deposit-contract-balance state)]
-    [:div.card
-     [:div.card-header
-      "Validator metrics"]
-     [:div.card-body
-      (when balance
-        [:p "Balance in deposit contract: " (.toLocaleString balance) " ETH"])]]))
-
-(defn ws-data-view [state]
-  (let [state @state
-        ws-data (state :ws-data)
-        network (state/->network state)]
-    [:div.card
-     [:div.card-header
-      "Weak subjectivity data (powered by " [:a {:href "https://github.com/adiasg/eth2-ws-provider"} "https://github.com/adiasg/eth2-ws-provider"] ")"]
-     [:div.card-body
-      (when-let [checkpoint (:checkpoint ws-data)]
-        (let [root (-> checkpoint (str/split ":") first)
-              stale? (:stale? ws-data)]
-          [:div
-           [:p "Latest checkpoint: " [:a {:href (explorer/link-to-block network root)} checkpoint]]
-           [:p "Safe? (only use the checkpoint if safe!) " (if stale? ui/bad-emoji ui/good-emoji)]]))]]))
 
 (defn container-row
   "layout for a 'widget'"
@@ -67,15 +41,16 @@
       [:li.nav-item
        [:a.nav-link {:data-toggle :tab
                      :href "#nav-block-tree"} "block tree"]]
-      [:li.nav-item
-       [:a.nav-link {:data-toggle :tab
-                     :href "#nav-participation"} "participation"]]
-      [:li.nav-item
-       [:a.nav-link {:data-toggle :tab
-                     :href "#nav-validator-info"} "validator info"]]
-      [:li.nav-item
-       [:a.nav-link {:data-toggle :tab
-                     :href "#nav-ws-data"} "weak subjectivity"]]]
+      ;; [:li.nav-item
+      ;;  [:a.nav-link {:data-toggle :tab
+      ;;                :href "#nav-participation"} "participation"]]
+      ;; [:li.nav-item
+      ;;  [:a.nav-link {:data-toggle :tab
+      ;;                :href "#nav-validator-info"} "validator info"]]
+      ;; [:li.nav-item
+      ;;  [:a.nav-link {:data-toggle :tab
+      ;;                :href "#nav-ws-data"} "weak subjectivity"]]
+      ]
      [:div.ml-auto
       [:span.navbar-text (str "network: " network)]]]))
 
@@ -90,63 +65,23 @@
       [nodes/view state]]]
     [:div#nav-block-tree.tab-pane.fade.show
      [container-row
-      [block-tree/view]]]
-    [:div#nav-participation.tab-pane.fade.show
-     [container-row
-      [participation/view state]]]
-    [:div#nav-validator-info.tab-pane.fade.show
-     [container-row
-      [validator-info-view state]]]
-    [:div#nav-ws-data.tab-pane.fade.show
-     [container-row
-      [ws-data-view state]]]
+      [block-tree/view state]]]
+    ;; [:div#nav-participation.tab-pane.fade.show
+    ;;  [container-row
+    ;;   [participation/view state]]]
+    ;; [:div#nav-validator-info.tab-pane.fade.show
+    ;;  [container-row
+    ;;   [validator/view state]]]
+    ;; [:div#nav-ws-data.tab-pane.fade.show
+    ;;  [container-row
+    ;;   [weak-subjectivity/view state]]]
     (when debug-mode?
       [container-row
        [ui/debug-view state]])]])
 
-;; (defn refresh-fork-choice [state]
-;;   (go (let [response (<! (api/fetch-fork-choice))
-;;             block-tree (get-in response [:body :block_tree])]
-;;         (when (seq (:root block-tree))
-;;           (let [total-weight (:weight block-tree)
-;;                 fork-choice (js/d3.hierarchy (clj->js block-tree))]
-;;             (block-tree/render! (state/->network state) fork-choice total-weight))))))
-
-(defn block-for [ms-delay]
-  (let [c (chan)]
-    (js/setTimeout (fn [] (close! c)) ms-delay)
-    c))
-
-;; (defn fetch-block-tree-if-new-head [state old new]
-;;   (when (not= old new)
-;;     (refresh-fork-choice state)))
-
-(defn find-majority-root [nodes]
-  (->> nodes
-       (map (comp :root :head))
-       frequencies
-       (sort-by val >)
-       first
-       first))
-
-(defn fetch-monitor-state [state]
-  (go (let [nodes (<! (api/fetch-nodes))
-            chain-data (<! (api/fetch-chain-data))
-            majority-root (find-majority-root nodes)
-            ;; old-root (get @state :majority-root "")
-            ]
-        (swap! state merge {:nodes nodes
-                            :majority-root majority-root
-                            :chain chain-data}))))
-        ;; NOTE: we block here to give the backend time to compute
-        ;; the updated fork choice... should be able to improve
-        ;; (go (let [blocking-task (block-for 700)]
-        ;;       (<! blocking-task)
-        ;;       (fetch-block-tree-if-new-head old-root majority-root)))
-
-(defn start-polling-for-heads [state]
-  (let [polling-task (js/setInterval (partial fetch-monitor-state state) polling-frequency)]
-    (swap! state assoc :polling-task polling-task)))
+(defn update-block-tree [state]
+  (go (let [block-tree (<! (api/fetch-fork-choice))]
+        (swap! state merge {:block-tree block-tree}))))
 
 ;; (defn fetch-participation-data [state]
 ;;   (go
@@ -169,16 +104,35 @@
 ;;   (let [deposit-contract-polling-task (js/setInterval fetch-deposit-contract-data (* 3600 1000))]
 ;;     (swap! state assoc :deposit-contract-polling-task deposit-contract-polling-task)))
 
-(defn update-slot-clock [network-config state]
-  (let [old-epoch (state/->current-epoch @state)
-        new-clock (clock/compute network-config (get-time))
-        new-epoch (:epoch new-clock)]
-    ;; (when (> new-epoch old-epoch)
-    ;;   (fetch-participation-data state))
-    (swap! state assoc :slot-clock new-clock)))
+(defn- find-majority-root [nodes]
+  (->> nodes
+       (map (comp :root :head))
+       frequencies
+       (sort-by val >)
+       first
+       first))
+
+(defn fetch-monitor-state [state]
+  (go (let [nodes (<! (api/fetch-nodes))
+            chain-data (<! (api/fetch-chain-data))
+            old-majority-root (:majority-root @state)
+            majority-root (find-majority-root nodes)
+            new-root? (not= majority-root old-majority-root)]
+        (swap! state merge {:nodes nodes
+                            :majority-root majority-root
+                            :chain chain-data})
+        (when new-root?
+          (update-block-tree state)))))
+
+(defn start-polling-nodes [state]
+  (let [polling-task (js/setInterval #(fetch-monitor-state state) polling-frequency)]
+    (swap! state assoc :polling-task polling-task)))
+
+(defn- update-slot-clock [state network-config]
+  (swap! state assoc :slot-clock (clock/compute network-config (now-ms))))
 
 (defn start-slot-clock [network-config state]
-  (let [timer-task (js/setInterval #(update-slot-clock network-config state) slot-clock-refresh-frequency)]
+  (let [timer-task (js/setInterval #(update-slot-clock state network-config) slot-clock-refresh-frequency)]
     (swap! state assoc :timer-task timer-task)))
 
 ;; (defn fetch-ws-data [state]
@@ -199,24 +153,34 @@
 
 (defonce state (r/atom (state/new)))
 
+(defn block-for [ms-delay]
+  (let [c (chan)]
+    (js/setTimeout (fn [] (close! c)) ms-delay)
+    c))
+
 (defn boot-app []
   (go
-    (let [network-config (<! (api/fetch-network-config))]
-      (swap! state merge {:network-config network-config
-                          :slot-clock (clock/compute network-config (get-time))})
-      (update-slot-clock network-config state)
+    (let [network-config (<! (api/fetch-network-config))
+          ;; ms-to-next-slot (clock/ms-to-next-slot network-config (now-ms))
+          ]
+      ;; load the network config before everything else...
+      (swap! state assoc :network-config network-config)
+      (update-slot-clock state network-config)
       (fetch-monitor-state state)
+      (navigation/install)
+      (mount-app state)
+      (navigation/restore-last-state)
+      (start-slot-clock network-config state)
+      (start-polling-nodes state)
+      ;; block until next slot
+      ;; (<! (block-for ms-to-next-slot))
       ;; (fetch-participation-data)
       ;; (fetch-deposit-contract-data)
-      ;; (fetch-ws-data)
-      (mount-app state)
-      (navigation/install)
-      (start-slot-clock network-config state)
-      (start-polling-for-heads state)
       ;; (start-polling-for-deposit-contract-data)
-      ;; (refresh-fork-choice)
+      ;; (fetch-ws-data)
       ;; (refresh-ws-data spec)
-      (navigation/restore-last-state))))
+      ;; (refresh-fork-choice)
+      )))
 
 (defonce init
   (boot-app))

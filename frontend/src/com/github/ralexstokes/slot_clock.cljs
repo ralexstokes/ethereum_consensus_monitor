@@ -27,6 +27,12 @@
 (defn compute [{:keys [genesis-time seconds-per-slot slots-per-epoch]} current-time]
   (calculate-eth2-time current-time genesis-time seconds-per-slot slots-per-epoch))
 
+(defn ms-to-next-slot [{:keys [genesis-time seconds-per-slot]} now]
+  (let [current-slot (slot-from-timestamp now genesis-time seconds-per-slot)
+        next-slot (inc current-slot)
+        next-slot-ts (* next-slot seconds-per-slot)]
+    (- next-slot-ts now)))
+
 (defn- round-to-extremes [x]
   (let [margin 10]
     (cond
