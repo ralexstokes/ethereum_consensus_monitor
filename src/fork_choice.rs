@@ -31,7 +31,8 @@ impl ForkChoice {
     pub fn new(block: Coordinate, slots_per_epoch: u64) -> Self {
         Self {
             tree: Arc::new(RwLock::new(ForkChoiceNode {
-                block,
+                slot: block.slot,
+                root: block.root,
                 children: vec![],
                 weight: 0,
             })),
@@ -52,16 +53,15 @@ impl ForkChoice {
                 );
                 *inner = fork_choice;
             }
-            Err(err) => {
-                log::warn!("failed to update fork choice");
-            }
+            Err(_) => log::warn!("failed to update fork choice"),
         }
     }
 }
 
 #[derive(Serialize, Default, Debug)]
 pub struct ForkChoiceNode {
-    block: Coordinate,
+    slot: Slot,
+    root: Hash256,
     weight: u64,
     children: Vec<ForkChoiceNode>,
 }
@@ -124,10 +124,8 @@ fn build_fork_choice_tree(
         vec![]
     };
     ForkChoiceNode {
-        block: Coordinate {
-            root: proto_node.root,
-            slot: proto_node.slot,
-        },
+        slot: proto_node.slot,
+        root: proto_node.root,
         weight: proto_node.weight,
         children,
     }

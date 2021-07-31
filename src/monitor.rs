@@ -8,7 +8,6 @@ use futures::future;
 use reqwest::ClientBuilder;
 use std::time::Duration;
 use tokio::task;
-use tokio::time::sleep;
 
 pub struct Monitor {
     config: Config,
@@ -79,9 +78,6 @@ impl Monitor {
             loop {
                 let (slot, epoch) = timer.tick_slot().await;
                 log::trace!("epoch: {}, slot: {}", epoch, slot);
-                // NOTE: add some delay to avoid racing nodes processing blocks
-                // TODO: remove upon moving to event-based API
-                sleep(Duration::from_millis(100)).await;
 
                 let fetches = nodes.iter().map(|node| async move {
                     let mut node = node.write().await;

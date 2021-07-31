@@ -37,19 +37,33 @@ impl From<&Config> for NetworkConfigResponse {
     }
 }
 
-pub struct ApiServer {
-    web_dir: PathBuf,
+struct ServerState {
     nodes: Vec<Node>,
-    fork_choice_handle: ForkChoice,
+    fork_choice: ForkChoice,
     chain: Chain,
     network_config: NetworkConfigResponse,
+}
+
+pub struct ApiServer {
+    web_dir: PathBuf,
+    state: Arc<ServerState>,
+}
+
+macro_rules! get {
+    ($path:literal, $handler:ident, $state:ident) => {
+        warp::get()
+            .and(warp::path($path))
+            .and(warp::path::end())
+            .and(with_state($state.clone()))
+            .and_then($handler);
+    };
 }
 
 impl ApiServer {
     pub fn new<P>(
         web_dir: P,
         nodes: Vec<Node>,
-        fork_choice_handle: ForkChoice,
+        fork_choice: ForkChoice,
         chain: Chain,
         config: &Config,
     ) -> Self
@@ -58,56 +72,25 @@ impl ApiServer {
     {
         Self {
             web_dir: web_dir.as_ref().to_path_buf(),
-            nodes,
-            fork_choice_handle,
-            chain,
-            network_config: config.into(),
+            state: Arc::new(ServerState {
+                nodes,
+                fork_choice,
+                chain,
+                network_config: config.into(),
+            }),
         }
     }
 
     pub async fn run(&self, addr: impl Into<SocketAddr>) {
-        let network_config = Arc::new(self.network_config.clone());
-        let network_config = warp::get()
-            .and(warp::path("network-config"))
-            .and(warp::path::end())
-            .and(warp::any().map(move || network_config.clone()))
-            .and_then(serve_network_config);
+        let state = self.state.clone();
 
-        let nodes_handle = self.nodes.clone();
-        let nodes = warp::get()
-            .and(warp::path("nodes"))
-            .and(warp::path::end())
-            .and(warp::any().map(move || nodes_handle.clone()))
-            .and_then(get_nodes);
-
-        let chain_handle = self.chain.clone();
-        let chain = warp::get()
-            .and(warp::path("chain"))
-            .and(warp::path::end())
-            .and(warp::any().map(move || chain_handle.clone()))
-            .and_then(get_chain_data);
-
-        let fork_choice_handle = self.fork_choice_handle.clone();
-        let fork_choice = warp::get()
-            .and(warp::path("fork-choice"))
-            .and(warp::path::end())
-            .and(warp::any().map(move || fork_choice_handle.clone()))
-            .and_then(get_fork_choice);
-
-        let participation = warp::get()
-            .and(warp::path("participation"))
-            .and(warp::path::end())
-            .and_then(serve_participation_data);
-
-        let deposit_contract = warp::get()
-            .and(warp::path("deposit-contract"))
-            .and(warp::path::end())
-            .and_then(serve_deposit_contract_data);
-
-        let weak_subjectivity = warp::get()
-            .and(warp::path("weak-subjectivity"))
-            .and(warp::path::end())
-            .and_then(serve_weak_subjectivity_data);
+        let network_config = get!("network-config", serve_network_config, state);
+        let nodes = get!("nodes", get_nodes, state);
+        let chain = get!("chain", get_chain_data, state);
+        let fork_choice = get!("fork-choice", get_fork_choice, state);
+        let participation = get!("participation", serve_participation_data, state);
+        let deposit_contract = get!("deposit-contract", serve_deposit_contract_data, state);
+        let weak_subjectivity = get!("weak-subjectivity", serve_weak_subjectivity_data, state);
 
         let api = warp::get()
             .and(warp::path("api"))
@@ -131,8 +114,14 @@ impl ApiServer {
     }
 }
 
-async fn get_nodes(nodes: Vec<Node>) -> Result<impl warp::Reply, warp::Rejection> {
-    let reads = nodes.iter().map(|node| async move {
+fn with_state(
+    state: Arc<ServerState>,
+) -> impl Filter<Extract = (Arc<ServerState>,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || state.clone())
+}
+
+async fn get_nodes(state: Arc<ServerState>) -> Result<impl warp::Reply, warp::Rejection> {
+    let reads = state.nodes.iter().map(|node| async move {
         let node = node.read().await;
         NodeResponse {
             id: node.id,
@@ -147,30 +136,36 @@ async fn get_nodes(nodes: Vec<Node>) -> Result<impl warp::Reply, warp::Rejection
 }
 
 async fn serve_network_config(
-    network_config: Arc<NetworkConfigResponse>,
+    state: Arc<ServerState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&*network_config))
+    Ok(warp::reply::json(&state.network_config))
 }
 
-async fn get_chain_data(chain: Chain) -> Result<impl warp::Reply, warp::Rejection> {
-    let status = chain.get_status();
+async fn get_chain_data(state: Arc<ServerState>) -> Result<impl warp::Reply, warp::Rejection> {
+    let status = state.chain.get_status();
     Ok(warp::reply::json(&status))
 }
 
-async fn get_fork_choice(fork_choice: ForkChoice) -> Result<impl warp::Reply, warp::Rejection> {
-    let tree = fork_choice.tree.read().expect("has data");
+async fn get_fork_choice(state: Arc<ServerState>) -> Result<impl warp::Reply, warp::Rejection> {
+    let tree = state.fork_choice.tree.read().expect("has data");
     Ok(warp::reply::json(&*tree))
 }
 
-async fn serve_participation_data() -> Result<impl warp::Reply, warp::Rejection> {
+async fn serve_participation_data(
+    _state: Arc<ServerState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
     let response: Vec<String> = vec![];
     Ok(warp::reply::json(&response))
 }
 
-async fn serve_deposit_contract_data() -> Result<impl warp::Reply, warp::Rejection> {
+async fn serve_deposit_contract_data(
+    _state: Arc<ServerState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
     Ok(warp::reply::json(&"todo"))
 }
 
-async fn serve_weak_subjectivity_data() -> Result<impl warp::Reply, warp::Rejection> {
+async fn serve_weak_subjectivity_data(
+    _state: Arc<ServerState>,
+) -> Result<impl warp::Reply, warp::Rejection> {
     Ok(warp::reply::json(&"todo"))
 }
