@@ -22,6 +22,9 @@
 (defn ->network [state]
   (get-in state [:network-config :network-name]))
 
+(defn ->slots-per-epoch [state]
+  (get-in state [:network-config :slots-per-epoch]))
+
 (defn ->deposit-contract-balance [state]
   (get-in state [:deposit-contract :balance]))
 
