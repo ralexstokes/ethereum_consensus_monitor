@@ -80,8 +80,8 @@
        [ui/debug-view state]])]])
 
 (defn update-block-tree [state]
-  (go (let [block-tree (<! (api/fetch-fork-choice))]
-        (swap! state merge {:block-tree block-tree}))))
+  (go (let [proto-array (<! (api/fetch-fork-choice))]
+        (swap! state merge {:proto-array proto-array}))))
 
 ;; (defn fetch-participation-data [state]
 ;;   (go

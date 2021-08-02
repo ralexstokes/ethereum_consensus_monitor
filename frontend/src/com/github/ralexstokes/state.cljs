@@ -12,7 +12,7 @@
                 :slot-in-epoch 0
                 :progress-into-slot 0}
    :nodes []
-   :block-tree {}
+   :proto-array {}
    :chain {:justified-checkpoint {:epoch 0 :root zero-root} :finalized-checkpoint {:epoch 0 :root zero-root}}
    :majority-root zero-root
    :participation-data []

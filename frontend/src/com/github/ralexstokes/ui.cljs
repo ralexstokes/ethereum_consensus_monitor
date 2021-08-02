@@ -16,6 +16,6 @@
      (pprint/pprint data))])
 
 (defn debug-view [state]
-  (let [state (assoc @state :block-tree :...elided)]
+  (let [state (assoc @state :proto-array :...elided)]
     [:div.row.debug
      (render-edn state)]))
