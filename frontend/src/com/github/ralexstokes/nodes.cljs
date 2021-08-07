@@ -53,9 +53,9 @@
         [:table.table.table-hover
          [:thead
           [:tr
-           [:th {:scope :col} "Consensus"]
+           [:th {:scope :col} "Consensus client"]
            (when has-execution-client?
-             [:th {:scope :col} "Execution"])
+             [:th {:scope :col} "Execution client"])
            [:th {:scope :col} "Version"]
            [:th {:scope :col} "Slot"]
            [:th {:scope :col} "Root"]
