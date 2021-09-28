@@ -1,11 +1,11 @@
-use crate::chain::{Chain, Coordinate};
+use crate::chain::Coordinate;
 use crate::config::Config;
-use crate::fork_choice::ForkChoice;
-use crate::node::{Node, Status};
+use crate::monitor::State;
+use crate::node::Status;
 use futures::future;
 use serde::Serialize;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use warp::Filter;
 
@@ -37,16 +37,8 @@ impl From<&Config> for NetworkConfigResponse {
     }
 }
 
-struct ServerState {
-    nodes: Vec<Node>,
-    fork_choice: ForkChoice,
-    chain: Chain,
-    network_config: NetworkConfigResponse,
-}
-
 pub struct ApiServer {
-    web_dir: PathBuf,
-    state: Arc<ServerState>,
+    state: Arc<State>,
 }
 
 macro_rules! get {
@@ -60,25 +52,8 @@ macro_rules! get {
 }
 
 impl ApiServer {
-    pub fn new<P>(
-        web_dir: P,
-        nodes: Vec<Node>,
-        fork_choice: ForkChoice,
-        chain: Chain,
-        config: &Config,
-    ) -> Self
-    where
-        P: AsRef<Path>,
-    {
-        Self {
-            web_dir: web_dir.as_ref().to_path_buf(),
-            state: Arc::new(ServerState {
-                nodes,
-                fork_choice,
-                chain,
-                network_config: config.into(),
-            }),
-        }
+    pub fn new(state: Arc<State>) -> Self {
+        Self { state }
     }
 
     pub async fn run(&self, addr: impl Into<SocketAddr>) {
@@ -86,11 +61,11 @@ impl ApiServer {
 
         let network_config = get!("network-config", serve_network_config, state);
         let nodes = get!("nodes", get_nodes, state);
-        let chain = get!("chain", get_chain_data, state);
-        let fork_choice = get!("fork-choice", get_fork_choice, state);
-        let participation = get!("participation", serve_participation_data, state);
-        let deposit_contract = get!("deposit-contract", serve_deposit_contract_data, state);
-        let weak_subjectivity = get!("weak-subjectivity", serve_weak_subjectivity_data, state);
+        // let chain = get!("chain", get_chain_data, state);
+        // // let fork_choice = get!("fork-choice", get_fork_choice, state);
+        // let participation = get!("participation", serve_participation_data, state);
+        // let deposit_contract = get!("deposit-contract", serve_deposit_contract_data, state);
+        // let weak_subjectivity = get!("weak-subjectivity", serve_weak_subjectivity_data, state);
 
         let api = warp::get()
             .and(warp::path("api"))
@@ -98,14 +73,14 @@ impl ApiServer {
             .and(
                 network_config
                     .or(nodes)
-                    .or(chain)
-                    .or(fork_choice)
-                    .or(participation)
-                    .or(deposit_contract)
-                    .or(weak_subjectivity),
+                    // .or(chain)
+                    // .or(fork_choice)
+                    // .or(participation)
+                    // .or(deposit_contract)
+                    // .or(weak_subjectivity),
             );
 
-        let html_dir = self.web_dir.clone();
+        let html_dir = state.config.monitor.output_dir.clone();
         let app = warp::get().and(warp::any()).and(warp::fs::dir(html_dir));
 
         let routes = api.or(app);
@@ -115,57 +90,58 @@ impl ApiServer {
 }
 
 fn with_state(
-    state: Arc<ServerState>,
-) -> impl Filter<Extract = (Arc<ServerState>,), Error = std::convert::Infallible> + Clone {
+    state: Arc<State>,
+) -> impl Filter<Extract = (Arc<State>,), Error = std::convert::Infallible> + Clone {
     warp::any().map(move || state.clone())
 }
 
-async fn get_nodes(state: Arc<ServerState>) -> Result<impl warp::Reply, warp::Rejection> {
-    let reads = state.nodes.iter().map(|node| async move {
-        let node = node.read().await;
-        NodeResponse {
-            id: node.id,
-            head: node.head,
-            version: node.version.clone(),
-            healthy: matches!(node.status, Status::Healthy | Status::Syncing),
-            syncing: matches!(node.status, Status::Syncing),
-        }
-    });
-    let nodes = future::join_all(reads).await;
+async fn get_nodes(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
+    let nodes = state
+        .nodes
+        .iter()
+        .map(|node| {
+            let node = node.state.lock().expect("can read");
+            NodeResponse {
+                id: node.id,
+                head: node.head,
+                version: node.version.clone(),
+                healthy: matches!(node.status, Status::Healthy | Status::Syncing),
+                syncing: matches!(node.status, Status::Syncing),
+            }
+        })
+        .collect::<Vec<_>>();
     Ok(warp::reply::json(&nodes))
 }
 
-async fn serve_network_config(
-    state: Arc<ServerState>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&state.network_config))
+async fn serve_network_config(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
+    let network_config: NetworkConfigResponse = (&state.config).into();
+    Ok(warp::reply::json(&network_config))
 }
 
-async fn get_chain_data(state: Arc<ServerState>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn get_chain_data(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
     let status = state.chain.get_status();
     Ok(warp::reply::json(&status))
 }
 
-async fn get_fork_choice(state: Arc<ServerState>) -> Result<impl warp::Reply, warp::Rejection> {
-    let tree = state.fork_choice.tree.read().expect("has data");
-    Ok(warp::reply::json(&*tree))
-}
+// async fn get_fork_choice(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
+//     let state = state.lock().expect("can read state");
+//     let tree = state.fork_choice.tree.read().expect("has data");
+//     Ok(warp::reply::json(&*tree))
+// }
 
-async fn serve_participation_data(
-    _state: Arc<ServerState>,
-) -> Result<impl warp::Reply, warp::Rejection> {
+async fn serve_participation_data(_state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
     let response: Vec<String> = vec![];
     Ok(warp::reply::json(&response))
 }
 
 async fn serve_deposit_contract_data(
-    _state: Arc<ServerState>,
+    _state: Arc<State>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     Ok(warp::reply::json(&"todo"))
 }
 
 async fn serve_weak_subjectivity_data(
-    _state: Arc<ServerState>,
+    _state: Arc<State>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     Ok(warp::reply::json(&"todo"))
 }

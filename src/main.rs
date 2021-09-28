@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{AppSettings, Clap};
-use eth_monitor::Monitor;
+use ethereum_consensus_monitor::Monitor;
 use std::fs;
 use std::path::PathBuf;
 

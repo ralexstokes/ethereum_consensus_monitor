@@ -1,5 +1,5 @@
 [package]
-name = "eth-monitor"
+name = "ethereum-consensus-monitor"
 version = "0.1.0"
 authors = ["Alex Stokes <r.alex.stokes@gmail.com>"]
 edition = "2018"
@@ -9,8 +9,9 @@ edition = "2018"
 [dependencies]
 tokio = { version = "1", features = ["full"]}
 reqwest = { version = "0.11", features = ["json"]}
+eventsource-client = { git = "https://github.com/launchdarkly/rust-eventsource-client", tag = "v0.7.0" }
 futures = "0.3"
-warp = "0.3"
+warp = "0.3.1"
 log = "0.4"
 pretty_env_logger = "0.4"
 clap = "3.0.0-beta.2"

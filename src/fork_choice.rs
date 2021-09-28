@@ -3,7 +3,7 @@ use eth2::types::{Epoch, Hash256, Slot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize, Deserialize)]
 pub struct ProtoNode {
@@ -21,40 +21,43 @@ pub struct ProtoArray {
     indices: HashMap<Hash256, usize>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ForkChoice {
-    pub tree: Arc<RwLock<ForkChoiceNode>>,
+    pub tree: Arc<Mutex<ForkChoiceNode>>,
     slots_per_epoch: u64,
 }
 
 impl ForkChoice {
     pub fn new(block: Coordinate, slots_per_epoch: u64) -> Self {
         Self {
-            tree: Arc::new(RwLock::new(ForkChoiceNode {
+            tree: Arc::new(Mutex::new(ForkChoiceNode {
                 slot: block.slot,
                 root: block.root,
                 children: vec![],
                 weight: 0,
+                is_canonical: false,
             })),
             slots_per_epoch,
         }
     }
 
     pub fn update(&mut self, proto_array: ProtoArray) {
-        let mut inner = self.tree.write().expect("has data");
-        let finalized_slot = proto_array.finalized_epoch.start_slot(self.slots_per_epoch);
-        let node_count = proto_array.nodes.len();
-        match ForkChoiceNode::try_from((proto_array, finalized_slot)) {
-            Ok(fork_choice) => {
-                log::trace!(
-                    "updated proto array starting at {} with {} nodes",
-                    finalized_slot,
-                    node_count,
-                );
-                *inner = fork_choice;
-            }
-            Err(_) => log::warn!("failed to update fork choice"),
-        }
+        // let finalized_slot = proto_array.finalized_epoch.start_slot(self.slots_per_epoch);
+        // let node_count = proto_array.nodes.len();
+        // match ForkChoiceNode::try_from((proto_array, finalized_slot)) {
+        //     Ok(fork_choice) => {
+        //         log::trace!(
+        //             "updated proto array starting at {} with {} nodes",
+        //             finalized_slot,
+        //             node_count,
+        //         );
+        //         let _ = self.tree.write().map(|mut inner| {
+        //             *inner = fork_choice;
+        //             Some(())
+        //         });
+        //     }
+        //     Err(err) => log::warn!("failed to update fork choice: {}", err),
+        // }
     }
 }
 
@@ -64,6 +67,7 @@ pub struct ForkChoiceNode {
     root: Hash256,
     weight: u64,
     children: Vec<ForkChoiceNode>,
+    is_canonical: bool,
 }
 
 #[derive(Debug)]
@@ -88,6 +92,9 @@ impl TryFrom<(ProtoArray, Slot)> for ForkChoiceNode {
     fn try_from((proto_array, finalized_slot): (ProtoArray, Slot)) -> Result<Self, Self::Error> {
         let mut parent_index_to_children: HashMap<usize, Vec<Hash256>> = HashMap::new();
 
+        let first_node = &proto_array.nodes[0];
+        let best_descendant = first_node.best_descendant;
+
         let mut finalized_root = None;
         for node in proto_array.nodes.iter() {
             if node.slot < finalized_slot {
@@ -104,7 +111,14 @@ impl TryFrom<(ProtoArray, Slot)> for ForkChoiceNode {
         }
         finalized_root
             .ok_or(ForkChoiceError::MissingFinalizedNode)
-            .map(|root| build_fork_choice_tree(&root, &parent_index_to_children, &proto_array))
+            .map(|root| {
+                build_fork_choice_tree(
+                    &root,
+                    &parent_index_to_children,
+                    &proto_array,
+                    best_descendant,
+                )
+            })
     }
 }
 
@@ -112,13 +126,25 @@ fn build_fork_choice_tree(
     root: &Hash256,
     parent_index_to_children: &HashMap<usize, Vec<Hash256>>,
     proto_array: &ProtoArray,
+    best_descendant: Option<u64>,
 ) -> ForkChoiceNode {
     let index = proto_array.indices[root];
     let proto_node = &proto_array.nodes[index];
+    let is_canonical = match (best_descendant, proto_node.best_descendant) {
+        (Some(head), Some(current)) => head == current,
+        _ => false,
+    };
     let children = if let Some(children) = parent_index_to_children.get(&index) {
         children
             .iter()
-            .map(|child| build_fork_choice_tree(child, parent_index_to_children, proto_array))
+            .map(|child| {
+                build_fork_choice_tree(
+                    child,
+                    parent_index_to_children,
+                    proto_array,
+                    best_descendant,
+                )
+            })
             .collect()
     } else {
         vec![]
@@ -128,5 +154,6 @@ fn build_fork_choice_tree(
         root: proto_node.root,
         weight: proto_node.weight,
         children,
+        is_canonical,
     }
 }

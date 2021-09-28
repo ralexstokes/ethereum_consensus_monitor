@@ -3,7 +3,7 @@
   (:require
    [com.github.ralexstokes.slot-clock :as clock]
    [com.github.ralexstokes.api-client :as api]
-   [com.github.ralexstokes.block-tree :as block-tree]
+  ;;  [com.github.ralexstokes.block-tree :as block-tree]
    [com.github.ralexstokes.nodes :as nodes]
    [com.github.ralexstokes.navigation :as navigation]
   ;;  [com.github.ralexstokes.validator :as validator]
@@ -33,14 +33,14 @@
 (defn nav-bar [state]
   (let [network (state/->network @state)]
     [:nav.navbar.navbar-expand-sm.navbar-light.bg-light
-     [:a.navbar-brand {:href "#"} "eth monitor"]
+     [:a.navbar-brand {:href "#"} "consensus monitor"]
      [:ul.nav.nav-pills.mr-auto
       [:li.nav-item
        [:a.nav-link.active {:data-toggle :tab
                             :href "#nav-tip-monitor"} "node monitor"]]
-      [:li.nav-item
-       [:a.nav-link {:data-toggle :tab
-                     :href "#nav-block-tree"} "block tree"]]
+      ;; [:li.nav-item
+      ;;  [:a.nav-link {:data-toggle :tab
+      ;;                  :href "#nav-block-tree"} "block tree"]]
       ;; [:li.nav-item
       ;;  [:a.nav-link {:data-toggle :tab
       ;;                :href "#nav-participation"} "participation"]]
@@ -63,9 +63,9 @@
     [:div#nav-tip-monitor.tab-pane.fade.show.active
      [container-row
       [nodes/view state]]]
-    [:div#nav-block-tree.tab-pane.fade.show
-     [container-row
-      [block-tree/view state]]]
+    ;; [:div#nav-block-tree.tab-pane.fade.show
+    ;;  [container-row
+    ;;   [block-tree/view state]]]
     ;; [:div#nav-participation.tab-pane.fade.show
     ;;  [container-row
     ;;   [participation/view state]]]
@@ -78,6 +78,12 @@
     (when debug-mode?
       [container-row
        [ui/debug-view state]])]])
+
+(defn- merge-once [old new k]
+  (let [has-data (seq (k old))]
+    (if has-data
+      old
+      (assoc old k (k new)))))
 
 (defn update-block-tree [state]
   (go (let [proto-array (<! (api/fetch-fork-choice))]
