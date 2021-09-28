@@ -4,3 +4,4 @@ target/
 .cpcache
 .nrepl-port
 .rebel_readline_history
+public/
