@@ -1,12 +1,13 @@
 use crate::chain::Coordinate;
 use crate::config::Config;
-use crate::monitor::State;
+use crate::monitor::{MonitorEvent, State};
 use crate::node::Status;
-use futures::future;
+use futures::{FutureExt, SinkExt, StreamExt};
 use serde::Serialize;
+use serde_json;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
+use warp::filters::ws::Message;
 use warp::Filter;
 
 #[derive(Serialize)]
@@ -66,6 +67,35 @@ impl ApiServer {
         // let participation = get!("participation", serve_participation_data, state);
         // let deposit_contract = get!("deposit-contract", serve_deposit_contract_data, state);
         // let weak_subjectivity = get!("weak-subjectivity", serve_weak_subjectivity_data, state);
+        let connect = warp::path("connect")
+            .and(with_state(state.clone()))
+            .and(warp::ws())
+            .map(|state: Arc<State>, ws: warp::ws::Ws| {
+                let mut rx = state.events_tx.subscribe();
+                ws.on_upgrade(|mut socket| async move {
+                    while let Ok(event) = rx.recv().await {
+                        match event {
+                            head @ MonitorEvent::NewHead { .. } => {
+                                match serde_json::to_string(&head) {
+                                    Ok(msg) => {
+                                        let msg = Message::text(msg);
+                                        match socket.send(msg).await {
+                                            Ok(_) => {}
+                                            Err(err) => log::warn!(
+                                                "error sending ws message to client: {:?}",
+                                                err
+                                            ),
+                                        }
+                                    }
+                                    Err(err) => {
+                                        log::warn!("error serializing head update: {:?}", err);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+            });
 
         let api = warp::get()
             .and(warp::path("api"))
@@ -73,6 +103,7 @@ impl ApiServer {
             .and(
                 network_config
                     .or(nodes)
+                    .or(connect)
                     // .or(chain)
                     // .or(fork_choice)
                     // .or(participation)

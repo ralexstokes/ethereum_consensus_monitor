@@ -1,15 +1,14 @@
 use crate::api_server::ApiServer;
-use crate::beacon_api_client::BeaconAPIClient;
 use crate::chain::{Chain, Coordinate};
 use crate::config::Config;
-use crate::fork_choice::ForkChoice;
-use crate::node::{Node, Status};
+use crate::node::Node;
 use crate::timer::Timer;
-use eth2::lighthouse_vc::http_client;
-use futures::{future, Stream, TryStreamExt};
+use futures::{future, TryStreamExt};
 use reqwest::{Client, ClientBuilder};
-use std::sync::{Arc, Mutex};
+use serde::Serialize;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::task::{self, JoinHandle};
 use tokio::time::sleep;
 
@@ -17,17 +16,23 @@ const LOCALHOST: [u8; 4] = [127, 0, 0, 1];
 const TEN_MINUTES_AS_SECONDS: u64 = 600;
 const NODE_CONNECT_ATTEMPTS: usize = 128;
 
+#[derive(Debug, Serialize, Clone)]
+pub enum MonitorEvent {
+    NewHead { id: u64, head: Coordinate },
+}
+
 pub struct Monitor {
     timer: Timer,
     state: Arc<State>,
 }
 
-#[derive(Default)]
 pub struct State {
     pub config: Config,
     pub nodes: Vec<Arc<Node>>,
     // fork_choice: ForkChoice,
     pub chain: Chain,
+    pub events_tx: Sender<MonitorEvent>,
+    pub events_rx: Receiver<MonitorEvent>,
 }
 
 fn build_node(endpoint: &String, http_client: Client) -> Arc<Node> {
@@ -53,13 +58,29 @@ async fn connect_to_node(node: &Arc<Node>) {
     }
 }
 
-async fn stream_head_updates(node: &Arc<Node>) {
+async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
     let client = &node.api_client;
 
     let mut stream = Box::pin(client.stream_head());
     while let Ok(Some(head)) = stream.try_next().await {
         match head {
-            Ok(head) => node.update_head(head),
+            Ok(head) => {
+                node.update_head(head);
+                let event = node
+                    .state
+                    .lock()
+                    .expect("can read state")
+                    .id
+                    .map(|id| MonitorEvent::NewHead { id, head });
+                if let Some(event) = event {
+                    match channel.send(event) {
+                        Ok(_) => {}
+                        Err(err) => {
+                            log::warn!("error sending head update for node {:?}: {:?}", node, err);
+                        }
+                    }
+                }
+            }
             Err(err) => {
                 log::warn!("error streaming head for node: {}", err);
                 continue;
@@ -84,10 +105,15 @@ impl Monitor {
             .build()
             .expect("no errors with http client setup");
         let nodes = build_nodes(config.monitor.endpoints.iter(), &http_client);
+        let node_count = nodes.len();
+        let head_event_buffer_size = 4 * node_count;
+        let (events_tx, events_rx) = broadcast::channel(head_event_buffer_size);
         let state = State {
             config,
             nodes,
-            ..Default::default()
+            chain: Default::default(),
+            events_tx,
+            events_rx,
         };
         Self {
             timer,
@@ -115,16 +141,17 @@ impl Monitor {
     pub async fn run(&self) {
         let timer = &self.timer;
 
-        let state = self.state.clone();
+        // let state = self.state.clone();
         let nodes_task = self
             .state
             .nodes
             .iter()
             .map(|node| {
                 let node = node.clone();
+                let channel = self.state.events_tx.clone();
                 task::spawn(async move {
                     connect_to_node(&node).await;
-                    stream_head_updates(&node).await;
+                    stream_head_updates(&node, channel).await;
                 })
             })
             .collect::<Vec<JoinHandle<_>>>();
