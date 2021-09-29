@@ -35,7 +35,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BeaconAPIClient {
     http: Client,
     endpoint: String,

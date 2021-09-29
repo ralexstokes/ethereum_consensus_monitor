@@ -122,6 +122,7 @@ pub struct NodeState {
 }
 
 /// Node represents an Ethereum node
+#[derive(Debug)]
 pub struct Node {
     pub endpoint: String,
     pub api_client: BeaconAPIClient,
