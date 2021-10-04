@@ -42,22 +42,22 @@ impl ForkChoice {
     }
 
     pub fn update(&mut self, proto_array: ProtoArray) {
-        // let finalized_slot = proto_array.finalized_epoch.start_slot(self.slots_per_epoch);
-        // let node_count = proto_array.nodes.len();
-        // match ForkChoiceNode::try_from((proto_array, finalized_slot)) {
-        //     Ok(fork_choice) => {
-        //         log::trace!(
-        //             "updated proto array starting at {} with {} nodes",
-        //             finalized_slot,
-        //             node_count,
-        //         );
-        //         let _ = self.tree.write().map(|mut inner| {
-        //             *inner = fork_choice;
-        //             Some(())
-        //         });
-        //     }
-        //     Err(err) => log::warn!("failed to update fork choice: {}", err),
-        // }
+        let finalized_slot = proto_array.finalized_epoch.start_slot(self.slots_per_epoch);
+        let node_count = proto_array.nodes.len();
+        match ForkChoiceNode::try_from((proto_array, finalized_slot)) {
+            Ok(..) => {
+                log::trace!(
+                    "updated proto array starting at {} with {} nodes",
+                    finalized_slot,
+                    node_count,
+                );
+                // let _ = self.tree.write().map(|mut inner| {
+                //     *inner = fork_choice;
+                //     Some(())
+                // });
+            }
+            Err(err) => log::warn!("failed to update fork choice: {}", err),
+        }
     }
 }
 

@@ -1,4 +1,6 @@
+use crate::node::ConsensusType;
 use crate::{chain::Coordinate, fork_choice::ProtoArray};
+use base64::{self, DecodeError};
 use eth2::types::{
     BlockHeaderAndSignature, BlockHeaderData, ErrorMessage, FinalityCheckpointsData,
     GenericResponse, Hash256, IdentityData, Slot, SyncingData, VersionData,
@@ -26,7 +28,11 @@ where
             Ok(error) => Err(APIClientError::APIError(error.message)),
             Err(_) => match std::str::from_utf8(&body) {
                 Ok(text) => {
-                    log::warn!("could not deserialize as json: {}", text);
+                    log::warn!(
+                        "could not deserialize as json: `{}` (length {})",
+                        text,
+                        text.len()
+                    );
                     Err(err.into())
                 }
                 Err(err) => Err(err.into()),
@@ -55,6 +61,8 @@ pub enum APIClientError {
     StringError(#[from] std::str::Utf8Error),
     #[error("error with eventsource sse: {0}")]
     EventSourceError(String),
+    #[error("error decoding base64 data: {0}")]
+    Base64Error(#[from] DecodeError),
 }
 
 type APIResult<T> = Result<T, APIClientError>;
@@ -113,30 +121,35 @@ impl BeaconAPIClient {
         do_get(&self.http, &endpoint).await
     }
 
-    pub fn stream_head(&self) -> impl Stream<Item = APIResult<APIResult<Coordinate>>> {
+    pub fn stream_head(
+        &self,
+        consensus_type: ConsensusType,
+    ) -> impl Stream<Item = APIResult<APIResult<Coordinate>>> {
         let url = self.endpoint_for("events?topics=head");
         let sse_client = sse::Client::for_url(&url)
             .expect("can parse url")
             .reconnect(
                 sse::ReconnectOptions::reconnect(true)
                     .retry_initial(false)
-                    .delay(Duration::from_secs(1))
+                    .delay(Duration::from_secs(5))
                     .backoff_factor(2)
                     .delay_max(Duration::from_secs(60))
                     .build(),
             )
             .build();
-        parse_head_events(sse_client)
+        parse_head_events(sse_client, consensus_type)
     }
 }
 
 fn parse_head_events(
     client: sse::Client<sse::HttpsConnector>,
+    consensus_type: ConsensusType,
 ) -> impl Stream<Item = APIResult<APIResult<Coordinate>>> {
     client
         .stream()
-        .map_ok(|event| {
-            assert!(event.event_type == "head");
+        .map_ok(move |event| {
+            let event_type = event.event_type.trim();
+            assert!(event_type == "head");
             let data = event.field("data");
             if let Some(data) = data {
                 let json: serde_json::Value = serde_json::from_slice(data).unwrap();
@@ -145,14 +158,17 @@ fn parse_head_events(
                         let root = data.get("block").ok_or_else(|| {
                             APIClientError::APIError("missing block root from head API".to_string())
                         })?;
-                        let root = match root {
-                            serde_json::Value::String(data) => {
-                                (&data[2..]).parse::<Hash256>().map_err(|err| {
+                        let root: Hash256 = match root {
+                            serde_json::Value::String(data) => match consensus_type {
+                                ConsensusType::Prysm => base64::decode(&data)
+                                    .map(|root| Hash256::from_slice(&root))
+                                    .map_err(|p| p.into()),
+                                _ => (&data[2..]).parse::<Hash256>().map_err(|err| {
                                     let mut buffer = String::new();
                                     let _ = write!(&mut buffer, "{:?}", err);
                                     APIClientError::EventSourceError(buffer)
-                                })
-                            }
+                                }),
+                            },
                             _ => Err(APIClientError::APIError(
                                 "wrong type for field in head event API".to_string(),
                             )),

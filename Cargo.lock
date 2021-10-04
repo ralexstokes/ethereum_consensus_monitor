@@ -1327,6 +1327,7 @@ name = "ethereum-consensus-monitor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.13.0",
  "clap 3.0.0-beta.2",
  "eth2",
  "eventsource-client",

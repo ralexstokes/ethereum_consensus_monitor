@@ -118,17 +118,20 @@
        first
        first))
 
+(defn- on-new-nodes [state nodes]
+  (let [old-majority-root (:majority-root @state)
+        majority-root (find-majority-root nodes)
+        new-root? (not= majority-root old-majority-root)]
+    (swap! state merge {:nodes nodes
+                        :majority-root majority-root
+                        #_{:chain chain-data}})
+    #_(when new-root?
+        (update-block-tree state))))
+
 (defn fetch-monitor-state [state]
-  (go (let [nodes (<! (api/fetch-nodes))
-            chain-data (<! (api/fetch-chain-data))
-            old-majority-root (:majority-root @state)
-            majority-root (find-majority-root nodes)
-            new-root? (not= majority-root old-majority-root)]
-        (swap! state merge {:nodes nodes
-                            :majority-root majority-root
-                            :chain chain-data})
-        (when new-root?
-          (update-block-tree state)))))
+  (go (let [nodes (<! (api/fetch-nodes))]
+            ;; chain-data (<! (api/fetch-chain-data))
+        (on-new-nodes state nodes))))
 
 (defn start-polling-nodes [state]
   (let [polling-task (js/setInterval #(fetch-monitor-state state) polling-frequency)]
@@ -164,6 +167,25 @@
     (js/setTimeout (fn [] (close! c)) ms-delay)
     c))
 
+(defn update-head [node id head]
+  (if (= id (:id node))
+    (assoc node :head head)
+    node))
+
+(defn- process-head-update [{:keys [id head]}]
+  (let [nodes (state/->nodes @state)
+        new-nodes (map #(update-head % id head) nodes)]
+    (on-new-nodes state new-nodes)
+    (swap! state assoc :nodes new-nodes)))
+
+(defn- process-monitor-message [msg]
+  (when-let [new-head (:new-head msg)]
+    (process-head-update new-head)))
+
+(defn connect-to-monitor []
+  (let [conn (api/connect-stream process-monitor-message debug-mode?)]
+    (swap! state assoc :monitor-conn conn)))
+
 (defn boot-app []
   (go
     (let [network-config (<! (api/fetch-network-config))
@@ -177,7 +199,8 @@
       (mount-app state)
       (navigation/restore-last-state)
       (start-slot-clock network-config state)
-      (start-polling-nodes state)
+      (connect-to-monitor)
+      ;; (start-polling-nodes state)
       ;; block until next slot
       ;; (<! (block-for ms-to-next-slot))
       ;; (fetch-participation-data)

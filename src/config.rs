@@ -16,10 +16,16 @@ pub struct NetworkConfig {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+pub struct EndpointDescription {
+    pub consensus: String,
+    pub execution: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
 pub struct MonitorConfig {
     pub output_dir: PathBuf,
     pub port: u16,
-    pub endpoints: Vec<String>,
+    pub endpoints: Vec<EndpointDescription>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]

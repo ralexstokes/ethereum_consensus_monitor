@@ -1,17 +1,11 @@
 use crate::beacon_api_client::{APIClientError, BeaconAPIClient};
-use crate::chain::{Coordinate, FinalityData};
-use crate::fork_choice::ProtoArray;
-use eth2::types::Slot;
+use crate::chain::Coordinate;
 use reqwest::Client;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use thiserror::Error;
-use tokio::time::{sleep, Duration};
-
-const CONSENSUS_HEAD_SYNC_TIME_MILLIS: u64 = 150;
-const CONSENSUS_HEAD_ATTEMPTS_PER_FETCH: u64 = 3;
 
 fn hash_of(some_string: &str) -> u64 {
     let mut s = DefaultHasher::new();
@@ -61,8 +55,8 @@ impl fmt::Display for Status {
     }
 }
 
-#[derive(Debug)]
-enum ConsensusType {
+#[derive(Debug, Clone)]
+pub enum ConsensusType {
     Prysm,
     Lighthouse,
     Teku,
@@ -83,7 +77,7 @@ impl fmt::Display for ConsensusType {
 }
 
 #[derive(Debug)]
-enum ExecutionType {
+pub enum ExecutionType {
     Geth,
     Nethermind,
     Besu,
@@ -109,16 +103,18 @@ pub enum NodeError {
 
 #[derive(Default, Debug)]
 pub struct NodeState {
-    pub status: Status,
-    node_type: Option<ConsensusType>,
-    pub version: Option<String>,
     pub id: Option<u64>,
+
+    pub status: Status,
+    pub node_type: Option<ConsensusType>,
+    // NOTE: temp for interop
+    pub execution_description: Option<String>,
+    pub version: Option<String>,
     // Indicate an attached execution client
-    execution_node_type: Option<ExecutionType>,
+    pub execution_node_type: Option<ExecutionType>,
 
     // last known head for this node
     pub head: Option<Coordinate>,
-    head_delay_ms: u64,
 }
 
 /// Node represents an Ethereum node
@@ -158,24 +154,24 @@ impl fmt::Display for Node {
 }
 
 impl Node {
-    pub fn new(endpoint: &str, http_client: Client) -> Self {
+    pub fn new(
+        endpoint: &str,
+        execution_description: Option<&String>,
+        http_client: Client,
+    ) -> Self {
+        let mut state: NodeState = Default::default();
+        state.execution_description = execution_description.map(|s| s.to_string());
         Self {
             endpoint: endpoint.to_string(),
             api_client: BeaconAPIClient::new(http_client, endpoint),
-            state: Default::default(),
+            state: Mutex::new(state),
         }
     }
 
-    // pub fn supports_fork_choice(&self) -> bool {
-    //     matches!(self.node_type, Some(ConsensusType::Lighthouse))
-    // }
-
-    // async fn wait_for_head_delay(&self) {
-    //     // allow some amount of time for synchronization
-    //     // in the event this call is racing block propagation
-    //     // during the current slot...
-    //     sleep(Duration::from_millis(self.head_delay_ms)).await;
-    // }
+    pub fn supports_fork_choice(&self) -> bool {
+        let state = self.state.lock().expect("can read state");
+        matches!(state.node_type, Some(ConsensusType::Lighthouse))
+    }
 
     // pub async fn fetch_fork_choice(&self) -> Result<ProtoArray, NodeError> {
     //     self.api_client
@@ -192,32 +188,6 @@ impl Node {
     //         .await
     //         .map(|checkpoints| checkpoints.into())
     //         .map_err(|e| e.into())
-    // }
-
-    // async fn fetch_head(&mut self) -> Result<Coordinate, NodeError> {
-    //     self.wait_for_head_delay().await;
-    //     let result = self.api_client.get_latest_header().await?;
-    //     let (root, latest_header) = result;
-    //     let slot = latest_header.message.slot;
-    //     let head = Coordinate { slot, root };
-    //     self.head = Some(head);
-    //     Ok(head)
-    // }
-
-    // pub async fn fetch_head_with_hint(&mut self, slot_hint: Slot) -> Result<Coordinate, NodeError> {
-    //     let mut head = self.fetch_head().await?;
-    //     for _ in 0..CONSENSUS_HEAD_ATTEMPTS_PER_FETCH {
-    //         if head.slot != slot_hint {
-    //             // if the head is behind what the caller expects,
-    //             // increase the `head_delay_ms` and try again...
-    //             self.head_delay_ms += CONSENSUS_HEAD_SYNC_TIME_MILLIS;
-    //             head = self.fetch_head().await?;
-    //         } else {
-    //             self.head_delay_ms = self.head_delay_ms.saturating_sub(10);
-    //             break;
-    //         }
-    //     }
-    //     Ok(head)
     // }
 
     pub async fn fetch_status(&self) -> Result<(), NodeError> {
@@ -251,11 +221,6 @@ impl Node {
         self.fetch_version().await?;
         self.fetch_status().await?;
         self.fetch_identity().await?;
-
-        // self.fetch_head().await?;
-        // if self.supports_fork_choice() {
-        //     self.fetch_fork_choice().await?;
-        // }
         Ok(())
     }
 

@@ -23,6 +23,7 @@ anyhow = "1.0"
 eth2 = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
 slot_clock = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
 proto_array = { git = "https://github.com/sigp/lighthouse", branch = "stable" }
+base64 = "0.13.0"
 
 [patch]
 [patch.crates-io]

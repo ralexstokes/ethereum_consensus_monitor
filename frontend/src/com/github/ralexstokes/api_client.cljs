@@ -3,7 +3,9 @@
    [cljs-http.client :as http]
    [cljs.core.async :as async]
    [camel-snake-kebab.core :as csk]
-   [clojure.walk :as walk]))
+   [clojure.string :as str]
+   [clojure.walk :as walk]
+   [wscljs.client :as ws]))
 
 (defn- url-with [path]
   (str "/api/v1" path))
@@ -40,7 +42,7 @@
   (get-api-data "/nodes"))
 
 (defn fetch-chain-data []
-  (get-api-data "/chain"))
+  #_(get-api-data "/chain"))
 
 (defn fetch-fork-choice []
   (get-api-data "/fork-choice"))
@@ -53,3 +55,28 @@
 
 (defn fetch-weak-subjectivity []
   (get-api-data "/weak-subjectivity"))
+
+(defn- parse-ws-message [e]
+  (->> e
+       .-data
+       (.parse js/JSON)))
+
+(defn- parse-clj-map [js-obj]
+  (js->clj js-obj :keywordize-keys true))
+
+(defn- handlers [dispatcher] {:on-message #(-> % parse-ws-message parse-clj-map kebab-keys-and-convert-types dispatcher)
+                              :on-open #(prn "opening ws connection to monitor")
+                              :on-close #(prn "monitor closed connection")})
+
+(defn- build-ws-url-for-origin [debug-mode?]
+  (let [url (js/URL. (url-with "/connect") (-> js/window .-location .-href))]
+    (when debug-mode?
+      (set! (.-port url) 8080))
+    (str/replace (str url) "http:" "ws:")))
+
+(defn connect-stream [dispatcher debug-mode?]
+  (let [url (build-ws-url-for-origin debug-mode?)
+        conn (ws/create url (handlers dispatcher))]
+    (set! (.-beforeunload js/window) (fn [_]
+                                       (ws/close conn)))
+    conn))

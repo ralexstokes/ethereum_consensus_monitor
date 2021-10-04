@@ -2,7 +2,7 @@ use crate::chain::Coordinate;
 use crate::config::Config;
 use crate::monitor::{MonitorEvent, State};
 use crate::node::Status;
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json;
 use std::net::SocketAddr;
@@ -15,6 +15,7 @@ struct NodeResponse {
     id: Option<u64>,
     head: Option<Coordinate>,
     version: Option<String>,
+    execution_client: Option<String>,
     healthy: bool,
     syncing: bool,
 }
@@ -38,7 +39,7 @@ impl From<&Config> for NetworkConfigResponse {
     }
 }
 
-pub struct ApiServer {
+pub struct APIServer {
     state: Arc<State>,
 }
 
@@ -52,7 +53,7 @@ macro_rules! get {
     };
 }
 
-impl ApiServer {
+impl APIServer {
     pub fn new(state: Arc<State>) -> Self {
         Self { state }
     }
@@ -73,23 +74,49 @@ impl ApiServer {
             .map(|state: Arc<State>, ws: warp::ws::Ws| {
                 let mut rx = state.events_tx.subscribe();
                 ws.on_upgrade(|mut socket| async move {
-                    while let Ok(event) = rx.recv().await {
-                        match event {
-                            head @ MonitorEvent::NewHead { .. } => {
-                                match serde_json::to_string(&head) {
-                                    Ok(msg) => {
-                                        let msg = Message::text(msg);
-                                        match socket.send(msg).await {
-                                            Ok(_) => {}
-                                            Err(err) => log::warn!(
-                                                "error sending ws message to client: {:?}",
-                                                err
-                                            ),
+                    loop {
+                        tokio::select! {
+                            result = rx.recv() => {
+                                match result {
+                                    Ok(event) => {
+                                        match event {
+                                            head @ MonitorEvent::NewHead { .. } => {
+                                                match serde_json::to_string(&head) {
+                                                    Ok(msg) => {
+                                                        let msg = Message::text(msg);
+                                                        match socket.send(msg).await {
+                                                            Ok(_) => {}
+                                                            Err(err) => log::warn!(
+                                                                "error sending ws message to client: {:?}",
+                                                                err
+                                                            ),
+                                                        }
+                                                    }
+                                                    Err(err) => {
+                                                        log::warn!("error serializing head update: {:?}", err);
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                     Err(err) => {
-                                        log::warn!("error serializing head update: {:?}", err);
+                                        log::warn!("error receiving update: {:?}", err);
                                     }
+                                }
+                            }
+                            msg = socket.next() => {
+                                match msg {
+                                    Some(Ok(msg)) => {
+                                        if msg.is_close() {
+                                            log::debug!("ws client disconnecting");
+                                            break;
+                                        }
+                                    }
+                                    Some(Err(err)) => {
+                                        log::warn!("error receiving ws message from client: {:?}", err);
+                                        break;
+                                    }
+                                    None => break,
                                 }
                             }
                         }
@@ -136,6 +163,7 @@ async fn get_nodes(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejectio
                 id: node.id,
                 head: node.head,
                 version: node.version.clone(),
+                execution_client: node.execution_description.clone(),
                 healthy: matches!(node.status, Status::Healthy | Status::Syncing),
                 syncing: matches!(node.status, Status::Syncing),
             }

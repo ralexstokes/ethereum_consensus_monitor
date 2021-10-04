@@ -1,4 +1,4 @@
-use crate::api_server::ApiServer;
+use crate::api_server::APIServer;
 use crate::chain::{Chain, Coordinate};
 use crate::config::Config;
 use crate::node::Node;
@@ -8,7 +8,7 @@ use reqwest::{Client, ClientBuilder};
 use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::broadcast::{self, Receiver, Sender};
+use tokio::sync::broadcast::{self, Sender};
 use tokio::task::{self, JoinHandle};
 use tokio::time::sleep;
 
@@ -18,33 +18,38 @@ const NODE_CONNECT_ATTEMPTS: usize = 128;
 
 #[derive(Debug, Serialize, Clone)]
 pub enum MonitorEvent {
+    #[serde(rename = "new_head")]
     NewHead { id: u64, head: Coordinate },
 }
 
 pub struct Monitor {
-    timer: Timer,
+    _timer: Timer,
     state: Arc<State>,
 }
 
 pub struct State {
     pub config: Config,
     pub nodes: Vec<Arc<Node>>,
-    // fork_choice: ForkChoice,
     pub chain: Chain,
     pub events_tx: Sender<MonitorEvent>,
-    pub events_rx: Receiver<MonitorEvent>,
 }
 
-fn build_node(endpoint: &String, http_client: Client) -> Arc<Node> {
-    Arc::new(Node::new(endpoint, http_client))
+fn build_node(
+    endpoint: &String,
+    execution_description: Option<&String>,
+    http_client: Client,
+) -> Arc<Node> {
+    Arc::new(Node::new(endpoint, execution_description, http_client))
 }
 
 fn build_nodes<'a>(
-    endpoints: impl Iterator<Item = &'a String>,
+    endpoints: impl Iterator<Item = (&'a String, Option<&'a String>)>,
     http_client: &Client,
 ) -> Vec<Arc<Node>> {
     endpoints
-        .map(|endpoint| build_node(endpoint, http_client.clone()))
+        .map(|(endpoint, execution_description)| {
+            build_node(endpoint, execution_description, http_client.clone())
+        })
         .collect()
 }
 
@@ -60,8 +65,18 @@ async fn connect_to_node(node: &Arc<Node>) {
 
 async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
     let client = &node.api_client;
+    let consensus_type = {
+        let state = node.state.lock().expect("can read state");
+        let consensus_type = state.node_type.clone();
 
-    let mut stream = Box::pin(client.stream_head());
+        if consensus_type.is_none() {
+            return;
+        }
+
+        consensus_type.unwrap()
+    };
+
+    let mut stream = Box::pin(client.stream_head(consensus_type));
     while let Ok(Some(head)) = stream.try_next().await {
         match head {
             Ok(head) => {
@@ -74,9 +89,15 @@ async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
                     .map(|id| MonitorEvent::NewHead { id, head });
                 if let Some(event) = event {
                     match channel.send(event) {
-                        Ok(_) => {}
-                        Err(err) => {
-                            log::warn!("error sending head update for node {:?}: {:?}", node, err);
+                        Ok(subscriber_count) => {
+                            log::debug!(
+                                "sent head updates to {} connected clients",
+                                subscriber_count
+                            );
+                        }
+                        Err(_) => {
+                            // just ignore any errors as it only signals lack of subscribers
+                            // not some problem w/ transmission
                         }
                     }
                 }
@@ -87,6 +108,10 @@ async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
             }
         }
     }
+}
+
+async fn find_fork_choice_provider(nodes: &[Arc<Node>]) -> Option<&Arc<Node>> {
+    nodes.iter().find(|node| node.supports_fork_choice())
 }
 
 impl Monitor {
@@ -104,45 +129,31 @@ impl Monitor {
             // .timeout(Duration::from_millis(1000))
             .build()
             .expect("no errors with http client setup");
-        let nodes = build_nodes(config.monitor.endpoints.iter(), &http_client);
+        let nodes = build_nodes(
+            config
+                .monitor
+                .endpoints
+                .iter()
+                .map(|endpoint| (&endpoint.consensus, endpoint.execution.as_ref())),
+            &http_client,
+        );
         let node_count = nodes.len();
         let head_event_buffer_size = 4 * node_count;
-        let (events_tx, events_rx) = broadcast::channel(head_event_buffer_size);
+        let (events_tx, _) = broadcast::channel(head_event_buffer_size);
         let state = State {
             config,
             nodes,
             chain: Default::default(),
             events_tx,
-            events_rx,
         };
         Self {
-            timer,
+            _timer: timer,
             state: Arc::new(state),
         }
     }
 
-    // async fn connect_to_nodes(&self) -> Vec<Node> {
-    //     let connections = self.config.monitor.endpoints.iter().map(|endpoint| {
-    //         let client = client.clone();
-    //         async move {
-    //             let node_ref = new_node(endpoint, client);
-    //             {
-    //                 let mut node = node_ref.write().await;
-    //                 if let Err(err) = node.connect().await {
-    //                     log::warn!("{}", err);
-    //                 }
-    //             }
-    //             node_ref
-    //         }
-    //     });
-    //     future::join_all(connections).await
-    // }
-
     pub async fn run(&self) {
-        let timer = &self.timer;
-
-        // let state = self.state.clone();
-        let nodes_task = self
+        let mut tasks = self
             .state
             .nodes
             .iter()
@@ -156,88 +167,79 @@ impl Monitor {
             })
             .collect::<Vec<JoinHandle<_>>>();
 
-        // let fork_choice_provider = find_fork_choice_provider(&nodes).await;
-        // let fork_choice_head = if let Some(ref node) = fork_choice_provider {
-        //     let node = node.read().await;
-        //     node.head.expect("has head")
-        // } else {
-        //     Coordinate::default()
-        // };
-        // let fork_choice = ForkChoice::new(
-        //     fork_choice_head,
-        //     self.config.consensus_chain.slots_per_epoch,
-        // );
-        // let fork_choice_handle = fork_choice.clone();
-        // let chain = Chain::default();
-        // let chain_handle = chain.clone();
-
-        // let timer_task = task::spawn(async move {
-        //     if timer.is_before_genesis() {
-        //         log::warn!("before genesis, blocking monitor until then...");
-        //     }
-        //     loop {
-        //         let (slot, epoch) = timer.tick_slot().await;
-        //         log::trace!("epoch: {}, slot: {}", epoch, slot);
-
-        //         let fetches = nodes.iter().map(|node| async move {
-        //             let mut node = node.write().await;
-        //             let result = match node.status {
-        //                 Status::Healthy => node.fetch_head_with_hint(slot).await.map(|_| ()),
-        //                 Status::Syncing => node.refresh_status().await,
-        //                 Status::Unreachable => node.refresh_status().await,
-        //             };
-        //             if let Err(e) = result {
-        //                 log::warn!("{}", e);
-        //                 node.status = Status::Unreachable;
-        //             }
-        //         });
-        //         future::join_all(fetches).await;
-
-        //         if let Some(ref fork_choice_provider) = fork_choice_provider {
-        //             let mut node = fork_choice_provider.write().await;
-        //             let result = node.fetch_fork_choice().await;
-        //             let mut fork_choice = fork_choice_handle.clone();
-        //             match result {
-        //                 Ok(proto_array) => {
-        //                     let _ = task::spawn_blocking(move || {
-        //                         fork_choice.update(proto_array);
-        //                     });
-        //                 }
-        //                 Err(e) => {
-        //                     log::warn!("{}", e);
-        //                     node.status = Status::Unreachable;
-        //                 }
-        //             }
-
-        //             let result = node.fetch_finality_data(slot).await;
-        //             match result {
-        //                 Ok(finality_data) => chain_handle.set_status(finality_data),
-        //                 Err(e) => {
-        //                     log::warn!("{}", e);
-        //                     node.status = Status::Unreachable;
-        //                 }
-        //             }
-        //         }
-        //     }
-        // });
-
-        let api_server = ApiServer::new(self.state.clone());
+        let api_server = APIServer::new(self.state.clone());
         let port = self.state.config.monitor.port;
         let server_task = task::spawn(async move {
             api_server.run((LOCALHOST, port)).await;
         });
 
-        // let tasks = vec![nodes_task];
-        future::join_all(nodes_task).await;
+        tasks.push(server_task);
+        future::join_all(tasks).await;
     }
 }
 
-// async fn find_fork_choice_provider(nodes: &[Node]) -> Option<Node> {
-//     for node_ref in nodes {
-//         let node = node_ref.read().await;
-//         if node.supports_fork_choice() {
-//             return Some(node_ref.clone());
+// tmp scratch
+// let fork_choice_provider = find_fork_choice_provider(&nodes).await;
+// let fork_choice_head = if let Some(ref node) = fork_choice_provider {
+//     let node = node.read().await;
+//     node.head.expect("has head")
+// } else {
+//     Coordinate::default()
+// };
+// let fork_choice = ForkChoice::new(
+//     fork_choice_head,
+//     self.config.consensus_chain.slots_per_epoch,
+// );
+// let fork_choice_handle = fork_choice.clone();
+// let chain = Chain::default();
+// let chain_handle = chain.clone();
+
+// let timer_task = task::spawn(async move {
+//     if timer.is_before_genesis() {
+//         log::warn!("before genesis, blocking monitor until then...");
+//     }
+//     loop {
+//         let (slot, epoch) = timer.tick_slot().await;
+//         log::trace!("epoch: {}, slot: {}", epoch, slot);
+
+//         let fetches = nodes.iter().map(|node| async move {
+//             let mut node = node.write().await;
+//             let result = match node.status {
+//                 Status::Healthy => node.fetch_head_with_hint(slot).await.map(|_| ()),
+//                 Status::Syncing => node.refresh_status().await,
+//                 Status::Unreachable => node.refresh_status().await,
+//             };
+//             if let Err(e) = result {
+//                 log::warn!("{}", e);
+//                 node.status = Status::Unreachable;
+//             }
+//         });
+//         future::join_all(fetches).await;
+
+//         if let Some(ref fork_choice_provider) = fork_choice_provider {
+//             let mut node = fork_choice_provider.write().await;
+//             let result = node.fetch_fork_choice().await;
+//             let mut fork_choice = fork_choice_handle.clone();
+//             match result {
+//                 Ok(proto_array) => {
+//                     let _ = task::spawn_blocking(move || {
+//                         fork_choice.update(proto_array);
+//                     });
+//                 }
+//                 Err(e) => {
+//                     log::warn!("{}", e);
+//                     node.status = Status::Unreachable;
+//                 }
+//             }
+
+//             let result = node.fetch_finality_data(slot).await;
+//             match result {
+//                 Ok(finality_data) => chain_handle.set_status(finality_data),
+//                 Err(e) => {
+//                     log::warn!("{}", e);
+//                     node.status = Status::Unreachable;
+//                 }
+//             }
 //         }
 //     }
-//     None
-// }
+// });
