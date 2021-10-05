@@ -42,7 +42,7 @@
   (get-api-data "/nodes"))
 
 (defn fetch-chain-data []
-  #_(get-api-data "/chain"))
+  (get-api-data "/chain"))
 
 (defn fetch-fork-choice []
   (get-api-data "/fork-choice"))
