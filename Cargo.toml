@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 tokio = { version = "1", features = ["full"]}
 reqwest = { version = "0.11", features = ["json"]}
-eventsource-client = { git = "https://github.com/launchdarkly/rust-eventsource-client", tag = "v0.7.0" }
+eventsource-client = { git = "https://github.com/ralexstokes/rust-eventsource-client", branch = "handle-rn-line-ending" }
 futures = "0.3"
 warp = "0.3.1"
 log = "0.4"
