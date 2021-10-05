@@ -71,11 +71,11 @@
         [:div.mb-3
          "Majority head root: "
          [:a {:href (explorer/link-to-block network head-root)} (ui/humanize-hex head-root)]]
-        [:div.mb-3 "Justified checkpoint: epoch "
-         [:a {:href (explorer/link-to-epoch network (:epoch justified))} (:epoch justified)]
-         " with root "
-         [:a {:href (explorer/link-to-block network (:root justified))} (-> justified :root ui/humanize-hex)]]
-        [:div "Finalized checkpoint: epoch "
-         [:a {:href (explorer/link-to-epoch network (:epoch finalized))} (:epoch finalized)]
-         " with root "
-         [:a {:href (explorer/link-to-block network (:root finalized))} (-> finalized :root ui/humanize-hex)]]]]]]))
+        #_[:div.mb-3 "Justified checkpoint: epoch "
+           [:a {:href (explorer/link-to-epoch network (:epoch justified))} (:epoch justified)]
+           " with root "
+           [:a {:href (explorer/link-to-block network (:root justified))} (-> justified :root ui/humanize-hex)]]
+        #_[:div "Finalized checkpoint: epoch "
+           [:a {:href (explorer/link-to-epoch network (:epoch finalized))} (:epoch finalized)]
+           " with root "
+           [:a {:href (explorer/link-to-block network (:root finalized))} (-> finalized :root ui/humanize-hex)]]]]]]))
