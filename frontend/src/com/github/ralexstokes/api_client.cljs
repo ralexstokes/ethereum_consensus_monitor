@@ -72,7 +72,9 @@
   (let [url (js/URL. (url-with "/connect") (-> js/window .-location .-href))]
     (when debug-mode?
       (set! (.-port url) 8080))
-    (str/replace (str url) "http:" "ws:")))
+    (-> (str url)
+        (str/replace "https:" "wss:")
+        (str/replace "http:" "ws:"))))
 
 (defn connect-stream [dispatcher debug-mode?]
   (let [url (build-ws-url-for-origin debug-mode?)

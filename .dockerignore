@@ -1,0 +1,6 @@
+target
+frontend
+Dockerfile
+.dockerignore
+.git
+.gitignore

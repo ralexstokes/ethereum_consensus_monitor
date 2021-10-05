@@ -5,7 +5,8 @@ build-prod: has-dir
 	cd frontend && clojure -M:prod
 copy-assets: has-dir
 	cp frontend/resources/public/*css public
-docker-build:
-	docker build -t ralexstokes/eth-monitor .
-deploy-docker: docker-build
-	docker push ralexstokes/eth-monitor
+build-docker:
+	docker build -t ralexstokes/ethereum-consensus-monitor .
+push-docker:
+	docker push ralexstokes/ethereum-consensus-monitor
+deploy-docker: build-docker push-docker
