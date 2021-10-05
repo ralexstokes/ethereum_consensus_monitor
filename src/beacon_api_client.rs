@@ -15,6 +15,9 @@ use std::fmt::Write;
 use std::time::Duration;
 use thiserror::Error;
 
+const ACCEPT_HEADER: &'static str = "Accept";
+const ACCEPT_HEADER_VALUE: &'static str = "text/event-stream";
+
 async fn do_get<T>(client: &Client, endpoint: &str) -> Result<T, APIClientError>
 where
     T: Serialize + DeserializeOwned,
@@ -136,6 +139,8 @@ impl BeaconAPIClient {
                     .delay_max(Duration::from_secs(60))
                     .build(),
             )
+            .header(ACCEPT_HEADER, ACCEPT_HEADER_VALUE)
+            .expect("can add header")
             .build();
         parse_head_events(sse_client, consensus_type)
     }
