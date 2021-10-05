@@ -12,7 +12,7 @@ use tokio::sync::broadcast::{self, Sender};
 use tokio::task::{self, JoinHandle};
 use tokio::time::sleep;
 
-const LOCALHOST: [u8; 4] = [127, 0, 0, 1];
+const LOCALHOST: [u8; 4] = [0, 0, 0, 0];
 const TEN_MINUTES_AS_SECONDS: u64 = 600;
 const NODE_CONNECT_ATTEMPTS: usize = 128;
 
