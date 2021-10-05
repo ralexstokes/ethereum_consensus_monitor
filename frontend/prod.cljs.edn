@@ -1,4 +1,5 @@
 ^{:figwheel-core false}
 {:main com.github.ralexstokes.app
  :optimizations :advanced
- :output-to "../public/js/main.js"}
+ :output-to "../public/js/main.js"
+ :closure-defines {"goog.DEBUG" false}}
