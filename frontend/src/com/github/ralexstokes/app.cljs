@@ -167,14 +167,18 @@
     (js/setTimeout (fn [] (close! c)) ms-delay)
     c))
 
-(defn update-head [node id head]
+(defn update-head-and-sync [node id head syncing]
   (if (= id (:id node))
-    (assoc node :head head)
+    (-> node
+        (assoc :head head)
+        (assoc :syncing syncing))
     node))
 
-(defn- process-head-update [{:keys [id head]}]
+(defn- process-head-update [{:keys [id head syncing]}]
   (let [nodes (state/->nodes @state)
-        new-nodes (map #(update-head % id head) nodes)]
+        new-nodes (map #(update-head-and-sync % id head syncing) nodes)]
+    (when debug-mode?
+      (prn "update" id head syncing))
     (on-new-nodes state new-nodes)
     (swap! state assoc :nodes new-nodes)))
 
