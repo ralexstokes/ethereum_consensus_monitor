@@ -1,7 +1,7 @@
 use crate::api_server::APIServer;
 use crate::chain::{Chain, Coordinate};
 use crate::config::Config;
-use crate::node::Node;
+use crate::node::{Node, Status};
 use crate::timer::Timer;
 use futures::{future, TryStreamExt};
 use reqwest::{Client, ClientBuilder};
@@ -19,7 +19,11 @@ const NODE_CONNECT_ATTEMPTS: usize = 128;
 #[derive(Debug, Serialize, Clone)]
 pub enum MonitorEvent {
     #[serde(rename = "new_head")]
-    NewHead { id: u64, head: Coordinate },
+    NewHead {
+        id: u64,
+        head: Coordinate,
+        syncing: bool,
+    },
 }
 
 pub struct Monitor {
@@ -81,24 +85,44 @@ async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
         match head {
             Ok(head) => {
                 node.update_head(head);
-                let event = node
-                    .state
-                    .lock()
-                    .expect("can read state")
-                    .id
-                    .map(|id| MonitorEvent::NewHead { id, head });
-                if let Some(event) = event {
-                    match channel.send(event) {
-                        Ok(subscriber_count) => {
-                            log::debug!(
-                                "sent head updates to {} connected clients",
-                                subscriber_count
-                            );
-                        }
-                        Err(_) => {
-                            // just ignore any errors as it only signals lack of subscribers
-                            // not some problem w/ transmission
-                        }
+                let mut event =
+                    node.state
+                        .lock()
+                        .expect("can read state")
+                        .id
+                        .map(|id| MonitorEvent::NewHead {
+                            id,
+                            head,
+                            syncing: false,
+                        });
+                if event.is_none() {
+                    continue;
+                }
+                let event = event.unwrap();
+                let syncing = match node.fetch_status().await {
+                    Ok(status) => {
+                        matches!(status, Status::Syncing)
+                    }
+                    Err(err) => {
+                        log::warn!("could not fetch node status: {}", err);
+                        false
+                    }
+                };
+                let event = match event {
+                    MonitorEvent::NewHead { id, head, .. } => {
+                        MonitorEvent::NewHead { id, head, syncing }
+                    }
+                };
+                match channel.send(event) {
+                    Ok(subscriber_count) => {
+                        log::debug!(
+                            "sent head updates to {} connected clients",
+                            subscriber_count
+                        );
+                    }
+                    Err(_) => {
+                        // just ignore any errors as it only signals lack of subscribers
+                        // not some problem w/ transmission
                     }
                 }
             }

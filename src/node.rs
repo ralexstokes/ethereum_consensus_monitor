@@ -32,7 +32,7 @@ fn infer_node_type(version: &str) -> Option<ConsensusType> {
     None
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Status {
     Unreachable,
     Syncing,
@@ -190,15 +190,16 @@ impl Node {
     //         .map_err(|e| e.into())
     // }
 
-    pub async fn fetch_status(&self) -> Result<(), NodeError> {
+    pub async fn fetch_status(&self) -> Result<Status, NodeError> {
         let sync_status = self.api_client.get_sync_status().await?;
         let mut inner = self.state.lock().expect("can lock state");
-        inner.status = if sync_status.is_syncing {
+        let status = if sync_status.is_syncing {
             Status::Syncing
         } else {
             Status::Healthy
         };
-        Ok(())
+        inner.status = status.clone();
+        Ok(status)
     }
 
     pub async fn fetch_version(&self) -> Result<(), NodeError> {
