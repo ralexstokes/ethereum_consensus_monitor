@@ -160,11 +160,7 @@ fn parse_head_events(
                 let json: serde_json::Value = serde_json::from_slice(data).unwrap();
                 match json {
                     serde_json::Value::Object(data) => {
-                        let root_key = match consensus_type {
-                            ConsensusType::Nimbus => "block_root",
-                            _ => "block",
-                        };
-                        let root = data.get(root_key).ok_or_else(|| {
+                        let root = data.get("block").ok_or_else(|| {
                             APIClientError::APIError("missing block root from head API".to_string())
                         })?;
                         let root: Hash256 = match root {
