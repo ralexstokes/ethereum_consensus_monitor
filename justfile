@@ -20,3 +20,6 @@ build-docker:
 push-docker:
 	docker push ralexstokes/ethereum_consensus_monitor
 deploy-docker: build-docker push-docker
+
+run CONFIG:
+    cargo run -- --config-path {{CONFIG}}
