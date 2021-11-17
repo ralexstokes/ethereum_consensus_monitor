@@ -4,7 +4,6 @@ use crate::monitor::{MonitorEvent, State};
 use crate::node::Status;
 use futures::{SinkExt, StreamExt};
 use serde::Serialize;
-use serde_json;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use warp::filters::ws::Message;

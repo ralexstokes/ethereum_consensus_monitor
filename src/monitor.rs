@@ -39,7 +39,7 @@ pub struct State {
 }
 
 fn build_node(
-    endpoint: &String,
+    endpoint: &str,
     execution_description: Option<&String>,
     http_client: Client,
 ) -> Arc<Node> {
@@ -63,7 +63,6 @@ async fn connect_to_node(node: &Arc<Node>) {
             log::warn!("{}", err);
             sleep(Duration::from_secs(TEN_MINUTES_AS_SECONDS)).await;
         }
-        break;
     }
 }
 
@@ -113,18 +112,13 @@ async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
                         MonitorEvent::NewHead { id, head, syncing }
                     }
                 };
-                match channel.send(event) {
-                    Ok(subscriber_count) => {
-                        log::debug!(
-                            "sent head updates to {} connected clients",
-                            subscriber_count
-                        );
-                    }
-                    Err(_) => {
-                        // just ignore any errors as it only signals lack of subscribers
-                        // not some problem w/ transmission
-                    }
+                if let Ok(subscriber_count) = channel.send(event) {
+                    log::debug!(
+                        "sent head updates to {} connected clients",
+                        subscriber_count
+                    );
                 }
+                // ignore errors as they only signal lack of subscribers
             }
             Err(err) => {
                 log::warn!("error streaming head for node: {}", err);

@@ -15,8 +15,8 @@ use std::fmt::Write;
 use std::time::Duration;
 use thiserror::Error;
 
-const ACCEPT_HEADER: &'static str = "Accept";
-const ACCEPT_HEADER_VALUE: &'static str = "text/event-stream";
+const ACCEPT_HEADER: &str = "Accept";
+const ACCEPT_HEADER_VALUE: &str = "text/event-stream";
 
 async fn do_get<T>(client: &Client, endpoint: &str) -> Result<T, APIClientError>
 where
@@ -195,11 +195,9 @@ fn parse_head_events(
                         }?;
                         Ok(Coordinate { slot, root })
                     }
-                    _ => {
-                        return Err(APIClientError::APIError(
-                            "json from head stream did not match expected format".to_string(),
-                        ))
-                    }
+                    _ => Err(APIClientError::APIError(
+                        "json from head stream did not match expected format".to_string(),
+                    )),
                 }
             } else {
                 Err(APIClientError::APIError(

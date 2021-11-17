@@ -159,8 +159,10 @@ impl Node {
         execution_description: Option<&String>,
         http_client: Client,
     ) -> Self {
-        let mut state: NodeState = Default::default();
-        state.execution_description = execution_description.map(|s| s.to_string());
+        let state = NodeState {
+            execution_description: execution_description.map(|s| s.to_string()),
+            ..Default::default()
+        };
         Self {
             endpoint: endpoint.to_string(),
             api_client: BeaconAPIClient::new(http_client, endpoint),
