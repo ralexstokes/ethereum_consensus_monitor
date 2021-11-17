@@ -85,7 +85,7 @@ async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
         match head {
             Ok(head) => {
                 node.update_head(head);
-                let mut event =
+                let event =
                     node.state
                         .lock()
                         .expect("can read state")

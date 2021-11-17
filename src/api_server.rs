@@ -49,7 +49,7 @@ macro_rules! get {
             .and(warp::path($path))
             .and(warp::path::end())
             .and(with_state($state.clone()))
-            .and_then($handler);
+            .and_then($handler)
     };
 }
 
