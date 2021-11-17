@@ -1,11 +1,10 @@
 use anyhow::{Context, Result};
-use clap::{AppSettings, Clap};
+use clap::Parser;
 use ethereum_consensus_monitor::Monitor;
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct Options {
     #[clap(long, default_value = "config.toml")]
     config_path: PathBuf,
