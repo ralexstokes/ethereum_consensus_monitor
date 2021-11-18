@@ -11,7 +11,7 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  execute:
+  test-and-lint:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
