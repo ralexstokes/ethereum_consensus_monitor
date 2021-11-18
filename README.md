@@ -1,10 +1,6 @@
 # ethereum consensus monitor
 
-WIP v2 of https://github.com/ralexstokes/eth2-fork-mon
-
-# installation
-
-- [ ] todo...
+Software to monitor ethereum's consensus layer.
 
 # how to build
 
@@ -18,19 +14,25 @@ web assets under `public`.
 if any of the static web assets change from their source in the frontend,
 they can be copied to the correct location for the backend with
 
-`make copy-assets`
+`just copy-assets`
 
 ## build a docker image
 
 to build a self-contained docker image:
 
-`make docker-build`
+`just docker-build`
 
 and/or deploy with:
 
-`make deploy-docker`
+`just deploy-docker`
 
 # how to run
+
+Everything the monitor needs to run is given in the config.
+
+An example configuration file is provided in `config.example.toml`.
+
+To run e.g. via `cargo`:
 
 `cargo run -- --config-path config.example.toml`
 
