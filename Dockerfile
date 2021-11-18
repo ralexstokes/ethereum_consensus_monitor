@@ -7,7 +7,7 @@ COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 
 # install dependencies needed for lighthouse
-RUN apt install -y git gcc g++ make cmake pkg-config
+RUN apt-get update && apt-get -y upgrade && apt-get install -y cmake
 
 RUN cargo build --release
 RUN rm src/*.rs
