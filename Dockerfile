@@ -6,6 +6,9 @@ WORKDIR /ethereum_consensus_monitor
 COPY ./Cargo.lock ./Cargo.lock
 COPY ./Cargo.toml ./Cargo.toml
 
+# install dependencies needed for lighthouse
+RUN sudo apt install -y git gcc g++ make cmake pkg-config
+
 RUN cargo build --release
 RUN rm src/*.rs
 
