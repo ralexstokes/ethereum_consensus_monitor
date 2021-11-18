@@ -40,16 +40,16 @@ struct ChainInner {
 pub struct Chain(Arc<Mutex<ChainInner>>);
 
 impl Chain {
-    pub fn get_status(&self) -> Option<FinalityData> {
-        self.0
-            .lock()
-            .ok()
-            .and_then(|guard| guard.finality_data.clone())
-    }
+    // pub fn get_status(&self) -> Option<FinalityData> {
+    //     self.0
+    //         .lock()
+    //         .ok()
+    //         .and_then(|guard| guard.finality_data.clone())
+    // }
 
-    pub fn set_status(&self, data: FinalityData) {
-        if let Ok(mut inner) = self.0.lock() {
-            inner.finality_data = Some(data);
-        }
-    }
+    // pub fn set_status(&self, data: FinalityData) {
+    //     if let Ok(mut inner) = self.0.lock() {
+    //         inner.finality_data = Some(data);
+    //     }
+    // }
 }

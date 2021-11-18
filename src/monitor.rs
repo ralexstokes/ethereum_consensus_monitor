@@ -128,9 +128,9 @@ async fn stream_head_updates(node: &Arc<Node>, channel: Sender<MonitorEvent>) {
     }
 }
 
-async fn find_fork_choice_provider(nodes: &[Arc<Node>]) -> Option<&Arc<Node>> {
-    nodes.iter().find(|node| node.supports_fork_choice())
-}
+// async fn find_fork_choice_provider(nodes: &[Arc<Node>]) -> Option<&Arc<Node>> {
+//     nodes.iter().find(|node| node.supports_fork_choice())
+// }
 
 impl Monitor {
     pub fn from_config(config: &str) -> Self {

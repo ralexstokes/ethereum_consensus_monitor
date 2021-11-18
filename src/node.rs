@@ -78,22 +78,22 @@ impl fmt::Display for ConsensusType {
 
 #[derive(Debug)]
 pub enum ExecutionType {
-    Geth,
-    Nethermind,
-    Besu,
-    Erigon,
+    // Geth,
+// Nethermind,
+// Besu,
+// Erigon,
 }
 
-impl fmt::Display for ExecutionType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ExecutionType::Geth => write!(f, "Geth"),
-            ExecutionType::Nethermind => write!(f, "Nethermind"),
-            ExecutionType::Besu => write!(f, "Besu"),
-            ExecutionType::Erigon => write!(f, "Erigon"),
-        }
-    }
-}
+// impl fmt::Display for ExecutionType {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         // match self {
+//             // ExecutionType::Geth => write!(f, "Geth"),
+//             // ExecutionType::Nethermind => write!(f, "Nethermind"),
+//             // ExecutionType::Besu => write!(f, "Besu"),
+//             // ExecutionType::Erigon => write!(f, "Erigon"),
+//         // }
+//     }
+// }
 
 #[derive(Error, Debug)]
 #[error("{0}")]
@@ -134,7 +134,7 @@ impl fmt::Display for NodeState {
             write!(f, "unknown")?
         }
         if let Some(ref node_type) = self.execution_node_type {
-            write!(f, "and execution client {}", node_type)?
+            write!(f, "and execution client {:?}", node_type)?
         }
         write!(f, " with head ")?;
         if let Some(ref head) = self.head {
@@ -170,10 +170,10 @@ impl Node {
         }
     }
 
-    pub fn supports_fork_choice(&self) -> bool {
-        let state = self.state.lock().expect("can read state");
-        matches!(state.node_type, Some(ConsensusType::Lighthouse))
-    }
+    // pub fn supports_fork_choice(&self) -> bool {
+    //     let state = self.state.lock().expect("can read state");
+    //     matches!(state.node_type, Some(ConsensusType::Lighthouse))
+    // }
 
     // pub async fn fetch_fork_choice(&self) -> Result<ProtoArray, NodeError> {
     //     self.api_client

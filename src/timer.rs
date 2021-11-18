@@ -1,10 +1,10 @@
-use eth2::types::Epoch;
+// use eth2::types::Epoch;
 use slot_clock::{Slot, SlotClock, SystemTimeSlotClock};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 pub struct Timer {
-    inner: SystemTimeSlotClock,
-    slots_per_epoch: u64,
+    _inner: SystemTimeSlotClock,
+    _slots_per_epoch: u64,
 }
 
 impl Timer {
@@ -14,26 +14,26 @@ impl Timer {
         let genesis_slot = Slot::new(0);
         let inner = SystemTimeSlotClock::new(genesis_slot, genesis, slot_duration);
         Self {
-            inner,
-            slots_per_epoch,
+            _inner: inner,
+            _slots_per_epoch: slots_per_epoch,
         }
     }
 
-    pub fn is_before_genesis(&self) -> bool {
-        self.inner
-            .is_prior_to_genesis()
-            .expect("can read the system clock")
-    }
+    // pub fn is_before_genesis(&self) -> bool {
+    //     self.inner
+    //         .is_prior_to_genesis()
+    //         .expect("can read the system clock")
+    // }
 
-    pub async fn tick_slot(&self) -> (Slot, Epoch) {
-        let next_slot_duration = self
-            .inner
-            .duration_to_next_slot()
-            .expect("can read system clock");
+    // pub async fn tick_slot(&self) -> (Slot, Epoch) {
+    //     let next_slot_duration = self
+    //         .inner
+    //         .duration_to_next_slot()
+    //         .expect("can read system clock");
 
-        sleep(next_slot_duration).await;
-        let slot = self.inner.now().expect("can read system clock");
-        let epoch = slot.epoch(self.slots_per_epoch);
-        (slot, epoch)
-    }
+    //     sleep(next_slot_duration).await;
+    //     let slot = self.inner.now().expect("can read system clock");
+    //     let epoch = slot.epoch(self.slots_per_epoch);
+    //     (slot, epoch)
+    // }
 }

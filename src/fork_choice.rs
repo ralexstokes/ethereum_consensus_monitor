@@ -1,4 +1,3 @@
-use crate::chain::Coordinate;
 use eth2::types::{Epoch, Hash256, Slot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -28,37 +27,37 @@ pub struct ForkChoice {
 }
 
 impl ForkChoice {
-    pub fn new(block: Coordinate, slots_per_epoch: u64) -> Self {
-        Self {
-            tree: Arc::new(Mutex::new(ForkChoiceNode {
-                slot: block.slot,
-                root: block.root,
-                children: vec![],
-                weight: 0,
-                is_canonical: false,
-            })),
-            slots_per_epoch,
-        }
-    }
+    // pub fn new(block: Coordinate, slots_per_epoch: u64) -> Self {
+    //     Self {
+    //         tree: Arc::new(Mutex::new(ForkChoiceNode {
+    //             slot: block.slot,
+    //             root: block.root,
+    //             children: vec![],
+    //             weight: 0,
+    //             is_canonical: false,
+    //         })),
+    //         slots_per_epoch,
+    //     }
+    // }
 
-    pub fn update(&mut self, proto_array: ProtoArray) {
-        let finalized_slot = proto_array.finalized_epoch.start_slot(self.slots_per_epoch);
-        let node_count = proto_array.nodes.len();
-        match ForkChoiceNode::try_from((proto_array, finalized_slot)) {
-            Ok(..) => {
-                log::trace!(
-                    "updated proto array starting at {} with {} nodes",
-                    finalized_slot,
-                    node_count,
-                );
-                // let _ = self.tree.write().map(|mut inner| {
-                //     *inner = fork_choice;
-                //     Some(())
-                // });
-            }
-            Err(err) => log::warn!("failed to update fork choice: {}", err),
-        }
-    }
+    // pub fn update(&mut self, proto_array: ProtoArray) {
+    //     let finalized_slot = proto_array.finalized_epoch.start_slot(self.slots_per_epoch);
+    //     let node_count = proto_array.nodes.len();
+    //     match ForkChoiceNode::try_from((proto_array, finalized_slot)) {
+    //         Ok(..) => {
+    //             log::trace!(
+    //                 "updated proto array starting at {} with {} nodes",
+    //                 finalized_slot,
+    //                 node_count,
+    //             );
+    //             // let _ = self.tree.write().map(|mut inner| {
+    //             //     *inner = fork_choice;
+    //             //     Some(())
+    //             // });
+    //         }
+    //         Err(err) => log::warn!("failed to update fork choice: {}", err),
+    //     }
+    // }
 }
 
 #[derive(Serialize, Default, Debug)]

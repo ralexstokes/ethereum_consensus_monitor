@@ -1,9 +1,8 @@
+use crate::chain::Coordinate;
 use crate::node::ConsensusType;
-use crate::{chain::Coordinate, fork_choice::ProtoArray};
 use base64::{self, DecodeError};
 use eth2::types::{
-    BlockHeaderAndSignature, BlockHeaderData, ErrorMessage, FinalityCheckpointsData,
-    GenericResponse, Hash256, IdentityData, Slot, SyncingData, VersionData,
+    ErrorMessage, GenericResponse, Hash256, IdentityData, Slot, SyncingData, VersionData,
 };
 use eventsource_client as sse;
 use futures::{Stream, TryStreamExt};
@@ -78,9 +77,9 @@ impl BeaconAPIClient {
         }
     }
 
-    pub fn get_endpoint(&self) -> &str {
-        self.endpoint.trim_end_matches(ENDPOINT_PREFIX)
-    }
+    // pub fn get_endpoint(&self) -> &str {
+    //     self.endpoint.trim_end_matches(ENDPOINT_PREFIX)
+    // }
 
     fn endpoint_for(&self, suffix: &str) -> String {
         let mut result = self.endpoint.clone();
@@ -95,12 +94,12 @@ impl BeaconAPIClient {
             .map(|data: VersionData| data.version)
     }
 
-    pub async fn get_latest_header(&self) -> APIResult<(Hash256, BlockHeaderAndSignature)> {
-        let endpoint = self.endpoint_for("beacon/headers/head");
-        do_get(&self.http, &endpoint)
-            .await
-            .map(|data: BlockHeaderData| (data.root, data.header))
-    }
+    // pub async fn get_latest_header(&self) -> APIResult<(Hash256, BlockHeaderAndSignature)> {
+    //     let endpoint = self.endpoint_for("beacon/headers/head");
+    //     do_get(&self.http, &endpoint)
+    //         .await
+    //         .map(|data: BlockHeaderData| (data.root, data.header))
+    // }
 
     pub async fn get_sync_status(&self) -> APIResult<SyncingData> {
         let endpoint = self.endpoint_for("node/syncing");
@@ -112,17 +111,17 @@ impl BeaconAPIClient {
         do_get(&self.http, &endpoint).await
     }
 
-    pub async fn get_finality_checkpoints(&self, slot: Slot) -> APIResult<FinalityCheckpointsData> {
-        let endpoint_query =
-            String::from("beacon/states/") + &slot.to_string() + "/finality_checkpoints";
-        let endpoint = self.endpoint_for(&endpoint_query);
-        do_get(&self.http, &endpoint).await
-    }
+    // pub async fn get_finality_checkpoints(&self, slot: Slot) -> APIResult<FinalityCheckpointsData> {
+    //     let endpoint_query =
+    //         String::from("beacon/states/") + &slot.to_string() + "/finality_checkpoints";
+    //     let endpoint = self.endpoint_for(&endpoint_query);
+    //     do_get(&self.http, &endpoint).await
+    // }
 
-    pub async fn get_lighthouse_fork_choice(&self) -> APIResult<ProtoArray> {
-        let endpoint = String::from(self.get_endpoint()) + "/lighthouse/proto_array";
-        do_get(&self.http, &endpoint).await
-    }
+    // pub async fn get_lighthouse_fork_choice(&self) -> APIResult<ProtoArray> {
+    //     let endpoint = String::from(self.get_endpoint()) + "/lighthouse/proto_array";
+    //     do_get(&self.http, &endpoint).await
+    // }
 
     pub fn stream_head(
         &self,

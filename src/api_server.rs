@@ -176,10 +176,11 @@ async fn serve_network_config(state: Arc<State>) -> Result<impl warp::Reply, war
     Ok(warp::reply::json(&network_config))
 }
 
-async fn get_chain_data(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
-    let status = state.chain.get_status();
-    Ok(warp::reply::json(&status))
-}
+// async fn get_chain_data(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
+//     // let status = state.chain.get_status();
+//     let status: FinalityData = Default::default();
+//     Ok(warp::reply::json(&status))
+// }
 
 // async fn get_fork_choice(state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
 //     let state = state.lock().expect("can read state");
@@ -187,19 +188,19 @@ async fn get_chain_data(state: Arc<State>) -> Result<impl warp::Reply, warp::Rej
 //     Ok(warp::reply::json(&*tree))
 // }
 
-async fn serve_participation_data(_state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
-    let response: Vec<String> = vec![];
-    Ok(warp::reply::json(&response))
-}
+// async fn serve_participation_data(_state: Arc<State>) -> Result<impl warp::Reply, warp::Rejection> {
+//     let response: Vec<String> = vec![];
+//     Ok(warp::reply::json(&response))
+// }
 
-async fn serve_deposit_contract_data(
-    _state: Arc<State>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&"todo"))
-}
+// async fn serve_deposit_contract_data(
+//     _state: Arc<State>,
+// ) -> Result<impl warp::Reply, warp::Rejection> {
+//     Ok(warp::reply::json(&"todo"))
+// }
 
-async fn serve_weak_subjectivity_data(
-    _state: Arc<State>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    Ok(warp::reply::json(&"todo"))
-}
+// async fn serve_weak_subjectivity_data(
+//     _state: Arc<State>,
+// ) -> Result<impl warp::Reply, warp::Rejection> {
+//     Ok(warp::reply::json(&"todo"))
+// }
