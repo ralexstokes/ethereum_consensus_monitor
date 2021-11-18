@@ -1,19 +1,23 @@
-[monitor]
-output_dir = "public"
-port = 8080
-endpoints = [
-    "http://127.0.0.1:5052",
-    # others here...
-]
-
 [network]
-name = "mainnet"
+name = "pithos"
 etherscan_api_key = "some-etherscan-api-key"
 
 [consensus_chain]
 seconds_per_slot = 12
 slots_per_epoch = 32
-genesis_time = 1606824023
+genesis_time = 1634213100
 
 [weak_subjectivity]
 provider_endpoint = "http://eth2-ws-provider_eth2_ws_server_1:80"
+
+[monitor]
+output_dir = "public"
+port = 8080
+
+[[monitor.endpoints]]
+consensus = "http://$BEACON_HTTP_API:$PORT"
+execution = "Geth"
+
+[[monitor.endpoints]]
+consensus = "http://$ANOTHER_BEACON_HTTP_API:$PORT"
+execution = "Nethermind"
