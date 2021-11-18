@@ -1,4 +1,4 @@
-name: Rust
+name: test-and-lint
 
 on:
   push:
@@ -8,12 +8,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
-  build:
-
+  execute:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
     - name: Install
@@ -23,4 +22,4 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Run clippy
-      run: cargo clippy --verbose -- -D warnings
+      run: cargo clippy --verbose
