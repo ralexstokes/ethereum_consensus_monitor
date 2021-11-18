@@ -11,7 +11,7 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  test-and-lint:
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -21,5 +21,13 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install
+      run: rustup update stable
+    - name: Format
+      run: cargo fmt -- --check
     - name: Run clippy
       run: cargo clippy --verbose
